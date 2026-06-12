@@ -11,6 +11,7 @@ import type { Analysis } from "@/lib/types";
 import { AnalysisModal } from "./AnalysisModal";
 import { EmptyState } from "./EmptyState";
 import { HistoryGrid } from "./HistoryGrid";
+import { HistoryStats } from "./HistoryStats";
 
 type LoadState = "loading" | "error" | "ready";
 type UrlMap = Record<string, string | null>;
@@ -120,7 +121,10 @@ export function HistoryClient() {
         analyses.length === 0 ? (
           <EmptyState />
         ) : (
-          <HistoryGrid analyses={analyses} imageUrls={imageUrls} onOpen={open} />
+          <>
+            <HistoryStats analyses={analyses} />
+            <HistoryGrid analyses={analyses} imageUrls={imageUrls} onOpen={open} />
+          </>
         )
       ) : null}
       {selected !== null ? (

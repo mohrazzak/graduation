@@ -115,6 +115,11 @@
   },
   "history": {
     "title": "History",
+    "stats": {
+      "total": "Assessments",
+      "avgConfidence": "Avg confidence",
+      "distribution": "Level distribution"
+    },
     "loading": "Loading history...",
     "empty": {
       "message": "No assessments yet. Run your first analysis.",
