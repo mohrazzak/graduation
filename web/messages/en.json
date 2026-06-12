@@ -212,12 +212,19 @@
       "password": "Password",
       "submit": "Create account",
       "haveAccount": "Already have an account?",
-      "loginLink": "Log in"
+      "loginLink": "Log in",
+      "confirmationNotice": "Account created. Check your inbox to confirm your email, then log in."
+    },
+    "password": {
+      "show": "Show password",
+      "hide": "Hide password"
     },
     "errors": {
       "invalidCredentials": "Wrong email or password.",
+      "emailNotConfirmed": "Confirm your email first — check your inbox, then log in.",
       "emailTaken": "This email is already registered. Log in instead.",
       "weakPassword": "Password must be at least 8 characters.",
+      "rateLimited": "Too many attempts. Wait a minute, then retry.",
       "networkError": "The server is unreachable. Check your connection, then retry.",
       "notConfigured": "Supabase is not configured yet. Add the project URL and anon key to web/.env.local, then retry.",
       "required": "This field is required.",

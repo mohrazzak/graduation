@@ -2,12 +2,18 @@
 // Shared login/register form: inline validation, Supabase sign-in/up via
 // lib/supabase/auth, and a locale-aware redirect once the session exists.
 import { useState, type FormEvent } from "react";
-import { useTranslations } from "next-intl";
-import { useRouter } from "@/i18n/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { ConfirmationNotice } from "@/components/auth/ConfirmationNotice";
+import { PasswordToggle } from "@/components/auth/PasswordToggle";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
-import { signIn, signUp, type AuthErrorCode } from "@/lib/supabase/auth";
+import {
+  signIn,
+  signUp,
+  type AuthErrorCode,
+  type SignUpResult,
+} from "@/lib/supabase/auth";
 import {
   validateDisplayName,
   validateEmail,
@@ -23,8 +29,10 @@ export interface AuthFormProps {
 // Stable AuthErrorCode union -> message ids; raw Supabase text never reaches the UI.
 const SUBMIT_ERROR_KEYS: Record<AuthErrorCode, string> = {
   invalid_credentials: "auth.errors.invalidCredentials",
+  email_not_confirmed: "auth.errors.emailNotConfirmed",
   email_taken: "auth.errors.emailTaken",
   weak_password: "auth.errors.weakPassword",
+  rate_limited: "auth.errors.rateLimited",
   network: "auth.errors.networkError",
   not_configured: "auth.errors.notConfigured",
   unknown: "errors.generic",
@@ -36,15 +44,18 @@ interface FieldErrors {
   password?: string;
 }
 
-export function AuthForm({ mode, nextPath = "/analyze" }: AuthFormProps) {
+export function AuthForm({ mode, nextPath }: AuthFormProps) {
   const t = useTranslations();
-  const router = useRouter();
+  const locale = useLocale();
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [confirmationRequired, setConfirmationRequired] = useState(false);
   const [pending, setPending] = useState(false);
+  const targetPath = nextPath ?? "/analyze";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -63,19 +74,33 @@ export function AuthForm({ mode, nextPath = "/analyze" }: AuthFormProps) {
     if (Object.values(errors).some(Boolean)) return;
 
     setPending(true);
-    const { error } =
+    // AuthResult is assignable to SignUpResult (confirmationRequired optional),
+    // so one variable covers both modes without widening to a union.
+    const result: SignUpResult =
       mode === "login"
         ? await signIn(email.trim(), password)
         : await signUp(email.trim(), password, displayName.trim());
-    if (error !== null) {
-      setSubmitError(t(SUBMIT_ERROR_KEYS[error]));
+    if (result.error !== null) {
+      setSubmitError(t(SUBMIT_ERROR_KEYS[result.error]));
       setPending(false);
       return;
     }
-    // refresh() forces the server-rendered Navbar to re-read getServerUser();
-    // without it the client cache keeps painting the signed-out chrome.
-    router.replace(nextPath);
-    router.refresh();
+    if (result.confirmationRequired === true) {
+      // No session exists yet — navigating would just bounce off the auth guard.
+      setConfirmationRequired(true);
+      setPending(false);
+      return;
+    }
+    // Full page load, NOT client nav: it guarantees the middleware re-reads the
+    // just-written auth cookies (router.replace raced them and intermittently
+    // bounced back to login). pending stays true through the unload on purpose.
+    window.location.assign(
+      targetPath === "/" ? `/${locale}` : `/${locale}${targetPath}`,
+    );
+  }
+
+  if (confirmationRequired) {
+    return <ConfirmationNotice nextPath={nextPath} />;
   }
 
   return (
@@ -86,6 +111,7 @@ export function AuthForm({ mode, nextPath = "/analyze" }: AuthFormProps) {
           id="displayName"
           label={t("auth.register.displayName")}
           autoComplete="name"
+          autoFocus
           required
           value={displayName}
           onChange={(event) => setDisplayName(event.target.value)}
@@ -97,6 +123,7 @@ export function AuthForm({ mode, nextPath = "/analyze" }: AuthFormProps) {
         type="email"
         label={t(`auth.${mode}.email`)}
         autoComplete="email"
+        autoFocus={mode === "login"}
         required
         value={email}
         onChange={(event) => setEmail(event.target.value)}
@@ -104,13 +131,19 @@ export function AuthForm({ mode, nextPath = "/analyze" }: AuthFormProps) {
       />
       <Input
         id="password"
-        type="password"
+        type={passwordVisible ? "text" : "password"}
         label={t(`auth.${mode}.password`)}
         autoComplete={mode === "login" ? "current-password" : "new-password"}
         required
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         error={fieldErrors.password}
+        trailing={
+          <PasswordToggle
+            visible={passwordVisible}
+            onToggle={() => setPasswordVisible((visible) => !visible)}
+          />
+        }
       />
       {submitError !== null ? (
         <p

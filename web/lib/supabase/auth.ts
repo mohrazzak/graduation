@@ -9,14 +9,21 @@ import { getSupabaseBrowserClient } from "./client";
 
 export type AuthErrorCode =
   | "invalid_credentials"
+  | "email_not_confirmed"
   | "email_taken"
   | "weak_password"
+  | "rate_limited"
   | "network"
   | "not_configured"
   | "unknown";
 
 export interface AuthResult {
   error: AuthErrorCode | null;
+}
+
+export interface SignUpResult extends AuthResult {
+  /** Email confirmation is ON and no session exists yet — show a notice, don't navigate. */
+  confirmationRequired?: boolean;
 }
 
 // True only when env points at a real https Supabase project — lets the auth
@@ -46,11 +53,15 @@ function mapAuthError(error: unknown): AuthErrorCode {
     switch (error.code) {
       case "invalid_credentials":
         return "invalid_credentials";
+      case "email_not_confirmed":
+        return "email_not_confirmed";
       case "user_already_exists":
       case "email_exists":
         return "email_taken";
       case "weak_password":
         return "weak_password";
+      case "over_email_send_rate_limit":
+        return "rate_limited";
       default:
         return "unknown";
     }
@@ -66,19 +77,35 @@ export async function signUp(
   email: string,
   password: string,
   displayName: string,
-): Promise<AuthResult> {
+): Promise<SignUpResult> {
   if (!isSupabaseConfigured()) {
     return { error: "not_configured" };
   }
   try {
     const supabase = getSupabaseBrowserClient();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       // user_metadata per spec section 9 — read back as user.user_metadata.
       options: { data: { display_name: displayName } },
     });
-    return { error: error ? mapAuthError(error) : null };
+    if (error) {
+      return { error: mapAuthError(error) };
+    }
+    // With email confirmation ON, Supabase obfuscates duplicate signups as a
+    // fake success whose user carries an EMPTY identities array (a real new
+    // user has one). identities can be absent entirely — only present-and-empty
+    // means duplicate. Checked before confirmationRequired: the fake response
+    // also lacks a session and would otherwise read as "confirm your email".
+    if (data.user?.identities?.length === 0) {
+      return { error: "email_taken" };
+    }
+    // A user without a session means Supabase is holding the account until the
+    // email is confirmed — the UI must say so instead of bouncing to login.
+    if (data.user && !data.session) {
+      return { error: null, confirmationRequired: true };
+    }
+    return { error: null };
   } catch (caught) {
     return { error: mapAuthError(caught) };
   }
