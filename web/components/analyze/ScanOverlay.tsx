@@ -8,27 +8,38 @@ import { useTranslations } from "next-intl";
 import { Spinner } from "@/components/ui/Spinner";
 
 const SWEEP_S = 1.2;
-const LINE_MS = 380; // 5 lines ≈ 1.9s, inside the 2.4s scan floor
+const LINE_MS = 380; // lines 2-5 reveal at 380ms steps ≈ 1.5s total, inside the 2.4s floor
 
 export function ScanOverlay() {
   const t = useTranslations("analyze");
   const reduced = useReducedMotion() ?? false;
   // t.raw: scanLog is an array message — typed access via cast, no `any` binding.
   const lines = t.raw("scanLog") as string[];
-  const [shown, setShown] = useState(reduced ? lines.length : 1);
+  const [shown, setShown] = useState(1);
+  // Derived at render so a mid-scan preference flip still shows the full log.
+  const visible = reduced ? lines.length : shown;
 
   useEffect(() => {
     if (reduced) return undefined;
     const id = window.setInterval(() => {
-      setShown((count) => Math.min(count + 1, lines.length));
+      setShown((count) => {
+        const next = Math.min(count + 1, lines.length);
+        if (next === lines.length) window.clearInterval(id);
+        return next;
+      });
     }, LINE_MS);
     return () => window.clearInterval(id);
   }, [reduced, lines.length]);
 
   return (
     <div role="status" className="absolute inset-0 overflow-hidden bg-bg/40">
-      <ul className="absolute start-3 top-3 space-y-1 font-mono text-[10px] leading-tight text-hazard/90">
-        {lines.slice(0, shown).map((line) => (
+      {/* Decorative theater — hidden from AT so each revealed line doesn't
+          re-announce the status region; the "analyzing" label carries status. */}
+      <ul
+        aria-hidden="true"
+        className="absolute start-3 top-3 rounded bg-bg/70 px-2 py-1.5 space-y-1 font-mono text-[10px] leading-tight text-hazard/90"
+      >
+        {lines.slice(0, visible).map((line) => (
           <li key={line}>{line}</li>
         ))}
       </ul>

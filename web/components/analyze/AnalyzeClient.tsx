@@ -21,7 +21,7 @@ import { useSaveAnalysis } from "./useSaveAnalysis";
 type Phase = "idle" | "ready" | "analyzing" | "done" | "error";
 
 // The scan must read as one full sweep AND give the inspection log time to
-// type out (5 lines × 380ms) even when the mock answers in milliseconds.
+// type out (lines 2-5 × 380ms ≈ 1.5s) even when the mock answers in milliseconds.
 const MIN_SCAN_MS = 2400;
 
 const delay = (ms: number): Promise<void> =>
