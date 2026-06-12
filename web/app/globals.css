@@ -1,26 +1,78 @@
+/* Design tokens + global chrome for DamageScale (spec section 8).
+   Permanently dark "structural assessment" theme — there is no light mode. */
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-bg: #0C0C0E;
+  --color-surface: #161619;
+  --color-line: #2A2A2F;
+  --color-text: #EDEDEF;
+  --color-muted: #8B8B93;
+  --color-hazard: #FFB000;
+  --color-alert: #FF3B30;
+
+  --font-display: var(--font-archivo);
+  --font-body: var(--font-inter);
+  --font-mono: var(--font-jetbrains);
+
+  --radius-DEFAULT: 4px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* Dark-only app: keeps native form controls and scrollbars dark too. */
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  /* Fallback stack covers the window until the fonts task defines --font-inter. */
+  font-family: var(--font-body, ui-sans-serif, system-ui, sans-serif);
+}
+
+/* Hazard-amber ring: the always-visible keyboard affordance (a11y floor). */
+:focus-visible {
+  outline: 2px solid var(--color-hazard);
+  outline-offset: 2px;
+}
+
+/* Static ~3% film grain across the viewport. Negative z-index paints it above
+   the propagated body background but below all content; it never intercepts input. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* The single hazard-stripe motif (spec section 8): apply to an empty element to
+   render a 4px tape strip across the top of the primary CTA / level-4-5 banner.
+   Black gaps (not transparent) keep the tape readable on the amber CTA itself. */
+@utility hazard-stripe {
+  display: block;
+  block-size: 4px;
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--color-hazard) 0,
+    var(--color-hazard) 4px,
+    #000 4px,
+    #000 8px
+  );
+}
+
+/* Spec forbids perpetual CSS animations; this net also halts any that slip in
+   when the user prefers reduced motion (framer-motion is gated per component). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
