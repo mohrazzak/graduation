@@ -12,7 +12,7 @@ export function PageBackdrop({ src }: PageBackdropProps) {
   return (
     // -z-10 sits below the film grain (body::before, z -1) and all content,
     // but still above the propagated body background.
-    <div aria-hidden="true" className="fixed inset-0 -z-10">
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10">
       <Image
         src={src}
         alt=""
