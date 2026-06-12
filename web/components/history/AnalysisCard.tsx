@@ -1,0 +1,64 @@
+"use client";
+// One saved assessment in the history grid: thumbnail, mini scale, level name,
+// confidence + date in mono. The whole card is a button opening the detail modal.
+import { useFormatter, useTranslations } from "next-intl";
+import { CornerTicks } from "@/components/ui/CornerTicks";
+import { ScaleStrip } from "@/components/ui/ScaleStrip";
+import { getLevel } from "@/lib/levels";
+import type { Analysis } from "@/lib/types";
+
+export interface AnalysisCardProps {
+  analysis: Analysis;
+  /** Signed thumbnail URL; null when signing failed (placeholder shown instead). */
+  imageUrl: string | null;
+  onOpen: () => void;
+}
+
+export function AnalysisCard({ analysis, imageUrl, onOpen }: AnalysisCardProps) {
+  const t = useTranslations();
+  const format = useFormatter();
+  const level = getLevel(analysis.level);
+  const levelName = t(`levels.${level.key}.name`);
+
+  return (
+    // A real <button> so the whole card is keyboard-operable for free; inner
+    // markup stays phrasing-level (span/img) to keep the HTML valid.
+    <button
+      type="button"
+      onClick={onOpen}
+      className="relative block w-full rounded border border-line bg-surface p-4 text-start transition-colors duration-150 hover:border-hazard"
+    >
+      <CornerTicks />
+      {imageUrl !== null ? (
+        // Plain <img>: short-lived signed URLs gain nothing from next/image.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl}
+          alt={levelName}
+          className="block aspect-[4/3] w-full rounded object-cover"
+        />
+      ) : (
+        // Signing failed for this item only: keep the card usable with a
+        // quiet mono level placeholder instead of a broken image.
+        <span className="flex aspect-[4/3] w-full items-center justify-center rounded bg-bg font-mono text-4xl text-muted">
+          {t("common.levelDigit", { id: String(level.id) })}
+        </span>
+      )}
+      <ScaleStrip size="md" activeLevel={level.id} className="mt-4" />
+      <span className="mt-3 block font-display text-sm font-bold uppercase tracking-wider">
+        {levelName}
+      </span>
+      <span className="mt-2 flex items-baseline justify-between gap-3 font-mono text-xs text-muted">
+        <span>
+          {format.number(analysis.confidence, {
+            style: "percent",
+            maximumFractionDigits: 1,
+          })}
+        </span>
+        <time dateTime={analysis.created_at}>
+          {format.dateTime(new Date(analysis.created_at), { dateStyle: "medium" })}
+        </time>
+      </span>
+    </button>
+  );
+}

@@ -1,18 +1,21 @@
 "use client";
 // Analyze orchestrator: explicit phase machine wiring DropZone/SampleStrip ->
-// scan -> POST /predict -> result or error, owning preview-URL + request lifecycles.
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+// scan -> POST /predict -> result + auto-save, owning preview/request lifecycles.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
+import { Toast } from "@/components/ui/Toast";
 import { ApiError, predictDamage, type ApiErrorKind } from "@/lib/api";
 import type { Prediction } from "@/lib/types";
 import { AnalyzeError } from "./AnalyzeError";
 import { DropZone } from "./DropZone";
 import { HeatmapToggle } from "./HeatmapToggle";
+import { ImageWithHeatmap } from "./ImageWithHeatmap";
 import { ResultPanel } from "./ResultPanel";
 import { SampleStrip } from "./SampleStrip";
+import { SaveFailedNote } from "./SaveFailedNote";
 import { ScanOverlay } from "./ScanOverlay";
+import { useSaveAnalysis } from "./useSaveAnalysis";
 
 type Phase = "idle" | "ready" | "analyzing" | "done" | "error";
 
@@ -20,21 +23,18 @@ type Phase = "idle" | "ready" | "analyzing" | "done" | "error";
 // milliseconds — without this floor the orchestrated moment would just flash.
 const MIN_SCAN_MS = 1200;
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => void window.setTimeout(resolve, ms));
 
 export function AnalyzeClient() {
   const t = useTranslations();
-  const reduced = useReducedMotion() ?? false;
   const [phase, setPhase] = useState<Phase>("idle");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [heatmapVisible, setHeatmapVisible] = useState(false);
   const [errorKind, setErrorKind] = useState<ApiErrorKind>("server");
+  const { status: saveStatus, errorCode: saveError, save, reset: resetSave } = useSaveAnalysis();
   // Monotonic id: any result landing after a reset/new selection is discarded.
   const requestIdRef = useRef(0);
   const previewUrlRef = useRef<string | null>(null);
@@ -59,9 +59,10 @@ export function AnalyzeClient() {
       setPreviewUrl(url);
       setPrediction(null);
       setHeatmapVisible(false);
+      resetSave();
       setPhase("ready");
     },
-    [releasePreview],
+    [releasePreview, resetSave],
   );
 
   const submit = useCallback(async () => {
@@ -74,12 +75,13 @@ export function AnalyzeClient() {
       if (requestId !== requestIdRef.current) return; // stale: user moved on
       setPrediction(result);
       setPhase("done");
+      save(file, result); // auto-save to history (spec section 9)
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
       setErrorKind(error instanceof ApiError ? error.kind : "server");
       setPhase("error");
     }
-  }, [file, phase]);
+  }, [file, phase, save]);
 
   const reset = useCallback(() => {
     requestIdRef.current += 1;
@@ -88,8 +90,9 @@ export function AnalyzeClient() {
     setPreviewUrl(null);
     setPrediction(null);
     setHeatmapVisible(false);
+    resetSave();
     setPhase("idle");
-  }, [releasePreview]);
+  }, [releasePreview, resetSave]);
 
   const heatmapSrc = prediction?.heatmap_base64 ?? null;
 
@@ -97,26 +100,15 @@ export function AnalyzeClient() {
     <div className="grid items-start gap-8 lg:grid-cols-2">
       <div className="flex flex-col gap-6">
         {previewUrl !== null ? (
-          <figure className="relative overflow-hidden rounded border border-line bg-surface">
-            {/* Plain <img>: next/image cannot optimize blob object URLs. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={previewUrl} alt={t("analyze.dropzone.previewAlt")} className="block w-full" />
-            <AnimatePresence>
-              {phase === "done" && heatmapVisible && heatmapSrc !== null ? (
-                <motion.img
-                  key="heatmap"
-                  src={`data:image/png;base64,${heatmapSrc}`}
-                  alt={t("analyze.heatmapAlt")}
-                  initial={reduced ? false : { opacity: 0 }}
-                  animate={{ opacity: 0.45 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: reduced ? 0 : 0.2 }}
-                  className="absolute inset-0 h-full w-full"
-                />
-              ) : null}
-            </AnimatePresence>
+          <ImageWithHeatmap
+            src={previewUrl}
+            alt={t("analyze.dropzone.previewAlt")}
+            heatmapSrc={heatmapSrc === null ? null : `data:image/png;base64,${heatmapSrc}`}
+            heatmapAlt={t("analyze.heatmapAlt")}
+            heatmapVisible={phase === "done" && heatmapVisible}
+          >
             {phase === "analyzing" ? <ScanOverlay /> : null}
-          </figure>
+          </ImageWithHeatmap>
         ) : (
           <DropZone onFile={selectFile} />
         )}
@@ -128,7 +120,7 @@ export function AnalyzeClient() {
         <SampleStrip onSample={selectFile} disabled={phase === "analyzing"} />
       </div>
 
-      <div>
+      <div className="flex flex-col gap-4">
         {phase === "done" && prediction !== null ? (
           <ResultPanel prediction={prediction}>
             {heatmapSrc !== null ? (
@@ -142,10 +134,21 @@ export function AnalyzeClient() {
             </Button>
           </ResultPanel>
         ) : null}
+        {phase === "done" && saveError !== null ? (
+          <SaveFailedNote
+            errorCode={saveError}
+            onRetry={() => file !== null && prediction !== null && save(file, prediction)}
+          />
+        ) : null}
         {phase === "error" ? (
           <AnalyzeError kind={errorKind} onRetry={() => void submit()} onReset={reset} />
         ) : null}
       </div>
+
+      {saveStatus === "saved" ? (
+        <Toast message={t("analyze.savedToast")} href="/history"
+          linkLabel={t("analyze.savedLink")} onDismiss={resetSave} />
+      ) : null}
     </div>
   );
 }

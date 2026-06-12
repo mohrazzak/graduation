@@ -98,11 +98,14 @@
       "badFileType": "Unsupported file type. Upload a JPEG, PNG or WebP image.",
       "fileTooLarge": "File exceeds 10 MB. Resize or compress the photo, then retry.",
       "predictionFailed": "The analysis service did not respond. Check that the API is running, then retry.",
-      "saveFailed": "The result was not saved to history. Check your connection, then retry."
+      "saveFailed": "The result was not saved to history. Check your connection, then retry.",
+      "notConfigured": "The result was not saved — Supabase is not configured yet. Add the project URL and anon key to web/.env.local, then retry.",
+      "notAuthenticated": "The result was not saved — your session has ended. Log in again, then retry."
     }
   },
   "history": {
     "title": "History",
+    "loading": "Loading history...",
     "empty": {
       "message": "No assessments yet. Run your first analysis.",
       "cta": "Run analysis"
@@ -113,7 +116,9 @@
     "viewDetails": "View details",
     "heatmapShow": "Show heatmap",
     "heatmapHide": "Hide heatmap",
-    "loadFailed": "History did not load. Check your connection, then retry."
+    "loadFailed": "History did not load. Check your connection, then retry.",
+    "notConfigured": "History is unavailable — Supabase is not configured yet. Add the project URL and anon key to web/.env.local, then retry.",
+    "deleteFailed": "The assessment was not deleted. Check your connection, then retry."
   },
   "howItWorks": {
     "title": "How it works",
