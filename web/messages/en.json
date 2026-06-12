@@ -89,6 +89,13 @@
     "samplesTitle": "Sample photos",
     "samplesHint": "No photo at hand? Tap a sample to run it instantly.",
     "analyzing": "ANALYZING STRUCTURE...",
+    "scanLog": [
+      "> ACQUIRING FRAME ............ OK",
+      "> NORMALIZING EXPOSURE ....... OK",
+      "> EDGE DENSITY MAP ........... OK",
+      "> LOCATING STRUCTURE ......... OK",
+      "> SCORING 6 DAMAGE CLASSES ..."
+    ],
     "confidence": "Confidence",
     "heatmapShow": "Show heatmap",
     "heatmapHide": "Hide heatmap",

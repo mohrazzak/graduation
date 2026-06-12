@@ -20,9 +20,9 @@ import { useSaveAnalysis } from "./useSaveAnalysis";
 
 type Phase = "idle" | "ready" | "analyzing" | "done" | "error";
 
-// The scan must read as one full 1.2s sweep even when the mock answers in
-// milliseconds — without this floor the orchestrated moment would just flash.
-const MIN_SCAN_MS = 1200;
+// The scan must read as one full sweep AND give the inspection log time to
+// type out (5 lines × 380ms) even when the mock answers in milliseconds.
+const MIN_SCAN_MS = 2400;
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => void window.setTimeout(resolve, ms));
