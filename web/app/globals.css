@@ -104,7 +104,10 @@ body::before {
   display: none;
 }
 @media print {
-  body > *:not(.report-doc) {
+  /* Only hide page content when a report is actually mounted — pages without
+     one (landing, how-it-works) keep their normal print output. :has() is
+     supported by all evergreen browsers; older ones simply print as before. */
+  body:has(.report-doc) > *:not(.report-doc) {
     display: none !important;
   }
   body::before {
@@ -116,5 +119,9 @@ body::before {
   .report-doc {
     display: block;
     color: #111;
+    /* Chrome/Edge strip backgrounds by default ("Background graphics" off),
+       which would erase ScaleStrip segments and probability bar fills. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

@@ -34,7 +34,7 @@ export function ReportDocument({
   return createPortal(
     <article className="report-doc p-10 font-body">
       <header className="border-b-2 border-black pb-4">
-        <p className="font-display text-2xl font-black uppercase">DamageScale</p>
+        <p className="font-display text-2xl font-black uppercase">{t("common.appName")}</p>
         <h1 className="mt-1 text-lg uppercase tracking-wider">{t("report.title")}</h1>
         <p className="mt-2 font-mono text-xs">
           {t("report.id")}: {reportId} · {t("report.date")}:{" "}
