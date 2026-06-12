@@ -19,10 +19,9 @@ export const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
 });
 
-// Cairo reaches weight 900 (Plex Arabic stopped at 700), giving Arabic display
-// headings the same heavy punch as Archivo's Latin ones.
+// Cairo is a variable font (wght 200-1000): one file covers every weight, so
+// Arabic display headings get the same heavy punch as Archivo's Latin ones.
 export const cairo = Cairo({
-  weight: ["400", "500", "600", "700", "800", "900"],
-  subsets: ["arabic", "latin"],
+  subsets: ["arabic"],
   variable: "--font-arabic",
 });

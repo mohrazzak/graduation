@@ -17,8 +17,8 @@ the same weight as the English Archivo ones.
 ## 1. Fonts
 
 - `web/lib/fonts.ts`: replace `IBM_Plex_Sans_Arabic` (weights 400–700) with
-  `Cairo` from `next/font/google` — variable font, load weights 400–900,
-  subsets `["arabic", "latin"]`, keep the CSS variable name `--font-arabic`.
+  `Cairo` from `next/font/google` — variable font (full wght axis), subset
+  `["arabic"]`, keep the CSS variable name `--font-arabic`.
 - Nothing else changes: `globals.css` already remaps `--font-display` and
   `--font-body` to `var(--font-arabic)` under `html[dir="rtl"]`, JetBrains Mono
   keeps the data role with the Arabic fallback chain, and the RTL
