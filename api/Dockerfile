@@ -21,4 +21,6 @@ COPY . .
 
 USER damagescale
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell-form with a default keeps localhost/compose on 8000 while platforms
+# that inject PORT (Render) get honored automatically.
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
