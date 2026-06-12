@@ -4,6 +4,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { ScaleStrip } from "@/components/ui/ScaleStrip";
 import { DAMAGE_LEVELS, getLevel, type DamageLevel } from "@/lib/levels";
@@ -33,60 +34,75 @@ export function Hero() {
   }, [reduced]);
 
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 py-16 sm:py-24">
-      <h1 className="max-w-4xl font-display text-4xl font-black uppercase tracking-tight sm:text-6xl lg:text-7xl">
-        {t("landing.heroTitle")}
-      </h1>
-      <p className="mt-4 max-w-xl text-base text-muted sm:text-lg">{t("landing.heroSub")}</p>
-      <div className="mt-8">
-        <Button href="/analyze" variant="primary" size="lg">
-          {t("common.actions.tryDemo")}
-        </Button>
-      </div>
+    <section className="relative isolate overflow-hidden border-b border-line">
+      {/* Decorative backdrop: meaning stays in the headline, so alt="" + aria-hidden. */}
+      <Image
+        src="/landing/hero.jpg"
+        alt=""
+        aria-hidden="true"
+        fill
+        priority
+        sizes="100vw"
+        className="object-cover grayscale brightness-[0.3]"
+      />
+      {/* Flat scrim, NOT a gradient (spec §8 bans gradients): guarantees AA contrast
+          for text over any photo region. */}
+      <div aria-hidden="true" className="absolute inset-0 bg-bg/70" />
+      <div className="relative mx-auto w-full max-w-6xl px-4 py-16 sm:py-24">
+        <h1 className="max-w-4xl font-display text-4xl font-black uppercase tracking-tight sm:text-6xl lg:text-7xl">
+          {t("landing.heroTitle")}
+        </h1>
+        <p className="mt-4 max-w-xl text-base text-muted sm:text-lg">{t("landing.heroSub")}</p>
+        <div className="mt-8">
+          <Button href="/analyze" variant="primary" size="lg">
+            {t("common.actions.tryDemo")}
+          </Button>
+        </div>
 
-      <div className="mt-16 sm:mt-20">
-        <ScaleStrip size="lg" animateIn activeLevel={reduced ? undefined : active?.id} />
-        {reduced ? (
-          // Static legend: same information as the cycle, without motion.
-          <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-            {DAMAGE_LEVELS.map((level) => (
-              <li key={level.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className="font-mono text-xs" style={{ color: level.color }}>
-                  {t("common.levelDigit", { id: String(level.id) })}
-                </span>
-                <span className="font-display text-sm font-bold uppercase">
-                  {t(`levels.${level.key}.name`)}
-                </span>
-                <span className="text-sm text-muted">{t(`levels.${level.key}.description`)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="mt-6 min-h-16">
-            <AnimatePresence mode="wait">
-              {active !== null ? (
-                <motion.p
-                  key={active.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.18 }}
-                  className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
-                >
-                  <span className="font-mono text-sm" style={{ color: active.color }}>
-                    {t("common.levelDigit", { id: String(active.id) })}
+        <div className="mt-16 sm:mt-20">
+          <ScaleStrip size="lg" animateIn activeLevel={reduced ? undefined : active?.id} />
+          {reduced ? (
+            // Static legend: same information as the cycle, without motion.
+            <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+              {DAMAGE_LEVELS.map((level) => (
+                <li key={level.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="font-mono text-xs" style={{ color: level.color }}>
+                    {t("common.levelDigit", { id: String(level.id) })}
                   </span>
-                  <span className="font-display text-lg font-bold uppercase">
-                    {t(`levels.${active.key}.name`)}
+                  <span className="font-display text-sm font-bold uppercase">
+                    {t(`levels.${level.key}.name`)}
                   </span>
-                  <span className="text-sm text-muted">
-                    {t(`levels.${active.key}.description`)}
-                  </span>
-                </motion.p>
-              ) : null}
-            </AnimatePresence>
-          </div>
-        )}
+                  <span className="text-sm text-muted">{t(`levels.${level.key}.description`)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-6 min-h-16">
+              <AnimatePresence mode="wait">
+                {active !== null ? (
+                  <motion.p
+                    key={active.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+                  >
+                    <span className="font-mono text-sm" style={{ color: active.color }}>
+                      {t("common.levelDigit", { id: String(active.id) })}
+                    </span>
+                    <span className="font-display text-lg font-bold uppercase">
+                      {t(`levels.${active.key}.name`)}
+                    </span>
+                    <span className="text-sm text-muted">
+                      {t(`levels.${active.key}.description`)}
+                    </span>
+                  </motion.p>
+                ) : null}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
