@@ -1,0 +1,175 @@
+{
+  "common": {
+    "appName": "DamageScale",
+    "actions": {
+      "analyzePhoto": "Analyze photo",
+      "saveResult": "Save result",
+      "viewHistory": "View history",
+      "analyzeAnother": "Analyze another",
+      "tryDemo": "Try the demo",
+      "openApp": "Open app",
+      "login": "Log in",
+      "register": "Register",
+      "logout": "Log out",
+      "delete": "Delete",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "retry": "Retry",
+      "close": "Close"
+    }
+  },
+  "nav": {
+    "howItWorks": "How it works",
+    "history": "History",
+    "analyze": "Analyze"
+  },
+  "footer": {
+    "projectName": "DamageScale — graduation project",
+    "university": "University name",
+    "supervisor": "Supervisor: Dr. Full Name",
+    "year": "2026"
+  },
+  "landing": {
+    "heroTitle": "HOW BADLY IS IT DAMAGED?",
+    "heroSub": "AI structural damage assessment, levels 0-5.",
+    "ctaTry": "Try the demo",
+    "howTitle": "How assessment works",
+    "steps": {
+      "upload": {
+        "title": "Upload",
+        "description": "Drop a building photo. JPEG, PNG or WebP, up to 10 MB."
+      },
+      "analyze": {
+        "title": "Analyze",
+        "description": "The model scores all six damage levels and returns a verdict with confidence."
+      },
+      "save": {
+        "title": "Save",
+        "description": "Each assessment is stored in your history, image and heatmap included."
+      }
+    },
+    "levelsTitle": "The six damage levels",
+    "levelsSub": "Every photo lands on one scale, from intact to total destruction."
+  },
+  "levels": {
+    "intact": {
+      "name": "Intact",
+      "description": "No visible damage."
+    },
+    "minor": {
+      "name": "Minor damage",
+      "description": "Hairline cracks in surfaces and finishes."
+    },
+    "moderate": {
+      "name": "Moderate damage",
+      "description": "Visible cracks, broken windows."
+    },
+    "severe": {
+      "name": "Severe damage",
+      "description": "Structural cracks, partial wall failure."
+    },
+    "partialCollapse": {
+      "name": "Partial collapse",
+      "description": "Sections of the structure have come down."
+    },
+    "totalDestruction": {
+      "name": "Total destruction",
+      "description": "The structure is beyond repair."
+    }
+  },
+  "analyze": {
+    "title": "Analyze",
+    "dropzone": {
+      "dragOrTap": "Drag a photo here, or tap to browse.",
+      "fileTypes": "JPEG, PNG or WebP — max 10 MB.",
+      "previewAlt": "Uploaded building photo awaiting analysis"
+    },
+    "samplesTitle": "Sample photos",
+    "samplesHint": "No photo at hand? Tap a sample to run it instantly.",
+    "analyzing": "ANALYZING STRUCTURE...",
+    "confidence": "Confidence",
+    "heatmapShow": "Show heatmap",
+    "heatmapHide": "Hide heatmap",
+    "savedToast": "Saved to history.",
+    "savedLink": "View history",
+    "errors": {
+      "badFileType": "Unsupported file type. Upload a JPEG, PNG or WebP image.",
+      "fileTooLarge": "File exceeds 10 MB. Resize or compress the photo, then retry.",
+      "predictionFailed": "The analysis service did not respond. Check that the API is running, then retry.",
+      "saveFailed": "The result was not saved to history. Check your connection, then retry."
+    }
+  },
+  "history": {
+    "title": "History",
+    "empty": {
+      "message": "No assessments yet. Run your first analysis.",
+      "cta": "Run analysis"
+    },
+    "confidence": "Confidence",
+    "deleteConfirm": "Delete this assessment? This cannot be undone.",
+    "deleted": "Assessment deleted.",
+    "viewDetails": "View details",
+    "heatmapShow": "Show heatmap",
+    "heatmapHide": "Hide heatmap",
+    "loadFailed": "History did not load. Check your connection, then retry."
+  },
+  "howItWorks": {
+    "title": "How it works",
+    "scale": {
+      "title": "The 0-5 damage scale",
+      "intro": "Every photo is classified into one of six levels, from an intact structure to total destruction. The scale mirrors how field engineers grade structural damage after a disaster: each step up marks a measurable loss of integrity."
+    },
+    "dataset": {
+      "title": "Dataset and labeling",
+      "body": "Placeholder — dataset source, size, class balance, and the labeling protocol will be documented here after data collection."
+    },
+    "model": {
+      "title": "Model architecture",
+      "body": "Placeholder — the network architecture, training setup, and augmentation strategy will be documented here once the model is finalized."
+    },
+    "metrics": {
+      "title": "Evaluation metrics",
+      "accuracy": "Accuracy: to be filled after training.",
+      "confusionMatrix": "Confusion matrix: to be filled after training."
+    },
+    "gradcam": {
+      "title": "What is the heatmap?",
+      "body": "The heatmap is generated with Grad-CAM, a technique that traces the model's prediction back to the image regions that influenced it most. Warm zones mark where the model looked when grading the damage — cracked walls, failed columns, collapsed sections — so you can verify the verdict rests on structural evidence, not on the background."
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Log in",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Log in",
+      "noAccount": "No account yet?",
+      "registerLink": "Register"
+    },
+    "register": {
+      "title": "Create account",
+      "displayName": "Display name",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Create account",
+      "haveAccount": "Already have an account?",
+      "loginLink": "Log in"
+    },
+    "errors": {
+      "invalidCredentials": "Wrong email or password.",
+      "emailTaken": "This email is already registered. Log in instead.",
+      "weakPassword": "Password must be at least 8 characters.",
+      "networkError": "The server is unreachable. Check your connection, then retry.",
+      "required": "This field is required.",
+      "invalidEmail": "Enter a valid email address."
+    }
+  },
+  "errors": {
+    "generic": "The request failed. Reload the page, then retry."
+  },
+  "localeSwitcher": {
+    "en": "EN",
+    "ar": "ع",
+    "ariaLabel": "Switch language"
+  }
+}
