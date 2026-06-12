@@ -25,8 +25,9 @@ const BASE =
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary: "bg-hazard text-bg hover:bg-hazard/85",
   ghost: "border border-line text-text hover:border-muted",
-  // The palette's single red doubles as the destructive-action color (delete, etc.).
-  danger: "border border-alert text-alert hover:bg-alert/10",
+  // Destructive actions wear the hazard accent, not alert red — #FF3B30 is
+  // reserved for level-4/5 surfaces only (spec section 8).
+  danger: "border border-hazard text-hazard hover:bg-hazard/10",
 };
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {

@@ -67,7 +67,7 @@
     },
     "severe": {
       "name": "ضرر بالغ",
-      "description": "شقوق إنشائية وانهيار جزئي في الجدران."
+      "description": "شقوق إنشائية وفشل جزئي في الجدران."
     },
     "partialCollapse": {
       "name": "انهيار جزئي",
@@ -75,7 +75,7 @@
     },
     "totalDestruction": {
       "name": "دمار كامل",
-      "description": "هيكل غير قابل للإصلاح."
+      "description": "المنشأة غير قابلة للإصلاح."
     }
   },
   "analyze": {

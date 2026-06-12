@@ -8,7 +8,7 @@ import { HeatmapToggle } from "@/components/analyze/HeatmapToggle";
 import { ImageWithHeatmap } from "@/components/analyze/ImageWithHeatmap";
 import { Button } from "@/components/ui/Button";
 import { ScaleStrip } from "@/components/ui/ScaleStrip";
-import { getLevel } from "@/lib/levels";
+import { getLevel, isAlertLevel } from "@/lib/levels";
 import type { Analysis } from "@/lib/types";
 import { ModalShell } from "./ModalShell";
 
@@ -40,6 +40,7 @@ export function AnalysisModal({
   const [deleting, setDeleting] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
   const level = getLevel(analysis.level);
+  const alert = isAlertLevel(level.id);
   const levelName = t(`levels.${level.key}.name`);
 
   async function confirmDelete(): Promise<void> {
@@ -55,10 +56,16 @@ export function AnalysisModal({
 
   return (
     <ModalShell labelledBy={TITLE_ID} onClose={onClose}>
+      {/* Level-4/5 banner treatment, mirroring ResultPanel — the only alert surfaces. */}
+      {alert ? (
+        <span aria-hidden="true" className="hazard-stripe absolute inset-x-0 top-0" />
+      ) : null}
       <div className="flex items-start justify-between gap-4">
         <h2
           id={TITLE_ID}
-          className="font-display text-xl font-extrabold uppercase tracking-tight"
+          className={`font-display text-xl font-extrabold uppercase tracking-tight ${
+            alert ? "text-alert" : ""
+          }`}
         >
           {levelName}
         </h2>
@@ -131,7 +138,8 @@ export function AnalysisModal({
         )}
       </div>
       {deleteFailed ? (
-        <p role="alert" className="mt-3 text-sm text-alert">
+        // Hazard, not alert: #FF3B30 is reserved for level-4/5 surfaces (spec section 8).
+        <p role="alert" className="mt-3 text-sm text-hazard">
           {t("history.deleteFailed")}
         </p>
       ) : null}

@@ -29,7 +29,13 @@ export async function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4">
-        <Link href="/" className="flex shrink-0 items-center gap-2.5">
+        {/* aria-label keeps the home link named on signed-in mobile, where the
+            wordmark is display:none and the strip is decorative. */}
+        <Link
+          href="/"
+          aria-label={t("common.appName")}
+          className="flex shrink-0 items-center gap-2.5"
+        >
           <ScaleStrip size="sm" />
           {/* Signed-in mobile bars carry two buttons; dropping the wordmark
               (the strip alone is the brand mark) keeps 390px from overflowing. */}

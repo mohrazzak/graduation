@@ -45,12 +45,13 @@ export function Input({
         autoComplete={autoComplete}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
+        // Hazard, not alert: #FF3B30 is reserved for level-4/5 surfaces (spec section 8).
         className={`h-10 rounded border bg-surface px-3 text-sm text-text placeholder:text-muted ${
-          error ? "border-alert" : "border-line"
+          error ? "border-hazard" : "border-line"
         }`}
       />
       {error ? (
-        <p id={errorId} className="text-xs text-alert">
+        <p id={errorId} className="text-xs text-hazard">
           {error}
         </p>
       ) : null}

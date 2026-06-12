@@ -23,6 +23,20 @@
 html[dir="rtl"] {
   --font-display: var(--font-arabic);
   --font-body: var(--font-arabic);
+  /* WHY the mono fallback: next-intl formatters emit Arabic-Indic digits in /ar,
+     and JetBrains Mono has no Arabic glyphs — without this they would fall back
+     to an arbitrary system font. Latin glyphs (the "L4" brand digits) still hit
+     JetBrains Mono first; Arabic-Indic digits render in IBM Plex Sans Arabic. */
+  --font-mono: var(--font-jetbrains), var(--font-arabic);
+}
+
+/* WHY: Arabic script is cursive — glyphs join — so any letter-spacing (negative
+   display tracking or the widened label tracking) visibly breaks the joins.
+   Neutralize every tracking utility under RTL; Latin-only strings lose a little
+   styling there, which is the cheaper trade-off. */
+html[dir="rtl"]
+  :is(.tracking-tighter, .tracking-tight, .tracking-wide, .tracking-wider, .tracking-widest) {
+  letter-spacing: 0;
 }
 
 html {
