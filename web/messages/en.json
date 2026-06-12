@@ -124,24 +124,51 @@
     "title": "How it works",
     "scale": {
       "title": "The 0-5 damage scale",
-      "intro": "Every photo is classified into one of six levels, from an intact structure to total destruction. The scale mirrors how field engineers grade structural damage after a disaster: each step up marks a measurable loss of integrity."
+      "intro": "Every photo is classified into one of six levels, from an intact structure to total destruction. The scale mirrors how field engineers grade structural damage after a disaster: each step up marks a measurable loss of integrity.",
+      "details": {
+        "intact": "No structural or cosmetic distress is observable. Walls, columns, beams, and slabs are continuous, openings are square, and the roofline runs straight. The building is serviceable without any intervention.",
+        "minor": "Hairline cracks appear in plaster, render, or paint, typically at openings and joints. The cracking is superficial and does not reach the load-bearing fabric; doors and windows still operate normally. Repair is cosmetic and the building remains fully serviceable.",
+        "moderate": "Cracks are clearly visible in masonry and around openings, accompanied by broken glazing and fallen plaster or roof tiles. Load-bearing elements are largely intact, but the localized distress warrants a closer inspection. Occupancy is possible after a professional check and targeted repairs.",
+        "severe": "Wide diagonal or stepped cracks cross load-bearing walls, and sections of masonry may have failed or shifted out of plane. Columns, beams, or slabs show distress such as concrete spalling, exposed reinforcement, or visible deformation. The building must not be occupied until a structural engineer has assessed it.",
+        "partialCollapse": "A portion of the structure has come down — a floor slab, a roof section, or an external wall — while the remainder still stands. Surviving elements may be carrying redistributed loads they were never designed for, so further failure is possible. The building is unsafe to enter; access is restricted to rescue and assessment teams.",
+        "totalDestruction": "The load-bearing system has failed throughout: the building has pancaked, overturned, or been reduced to rubble. No usable structure remains, and reconstruction means starting from the ground up. The site itself stays hazardous because of unstable debris."
+      }
     },
     "dataset": {
       "title": "Dataset and labeling",
-      "body": "Placeholder — dataset source, size, class balance, and the labeling protocol will be documented here after data collection."
+      "placeholderTag": "To be completed after data collection",
+      "sourcesTitle": "Data sources",
+      "sourcesBody": "Placeholder — this paragraph will document where the imagery comes from: public post-disaster collections, field photography, the number of images per source, and the class balance across the six levels.",
+      "labelingTitle": "Labeling protocol",
+      "labelingBody": "Placeholder — this paragraph will describe how each photo received its level: the written criteria per level, how many annotators graded each image, and how disagreements between annotators were resolved."
     },
     "model": {
       "title": "Model architecture",
-      "body": "Placeholder — the network architecture, training setup, and augmentation strategy will be documented here once the model is finalized."
+      "placeholderTag": "To be completed after training",
+      "body": "The classifier will be a convolutional neural network fine-tuned with transfer learning: a backbone pretrained on a large image corpus, with its classification head replaced by a six-way damage-level output. The chosen backbone, input resolution, and training schedule will be documented here once the model is finalized.",
+      "frameworkNote": "The deep-learning framework (PyTorch or TensorFlow) is deliberately left open. The backend hides the model behind a single predict() interface, so either framework can be dropped in without changing this app.",
+      "mockNote": "The demo currently runs on a mock endpoint that returns deterministic, realistic predictions — the same photo always yields the same verdict. The trained model will replace it behind the same API contract."
     },
     "metrics": {
       "title": "Evaluation metrics",
-      "accuracy": "Accuracy: to be filled after training.",
-      "confusionMatrix": "Confusion matrix: to be filled after training."
+      "placeholderTag": "To be completed after training",
+      "intro": "Every figure below is a placeholder slot. Real numbers will be reported from a held-out test set after training — nothing on this page is a measured result yet.",
+      "accuracyLabel": "Overall accuracy",
+      "pendingValue": "—",
+      "afterTraining": "After training",
+      "confusionTitle": "Confusion matrix",
+      "confusionCaption": "Empty 6×6 confusion-matrix slot. Rows are actual levels, columns are predicted levels; the diagonal cells carry each level's color at low opacity. Counts will be filled in after training.",
+      "axisActual": "Actual",
+      "axisPredicted": "Predicted",
+      "perLevelTitle": "Per-level precision and recall",
+      "levelHeader": "Level",
+      "precision": "Precision",
+      "recall": "Recall"
     },
     "gradcam": {
       "title": "What is the heatmap?",
-      "body": "The heatmap is generated with Grad-CAM, a technique that traces the model's prediction back to the image regions that influenced it most. Warm zones mark where the model looked when grading the damage — cracked walls, failed columns, collapsed sections — so you can verify the verdict rests on structural evidence, not on the background."
+      "body": "The heatmap is generated with Grad-CAM, a technique that traces the model's prediction back to the image regions that influenced it most. Warm zones mark where the model looked when grading the damage — cracked walls, failed columns, collapsed sections — so you can verify the verdict rests on structural evidence, not on the background.",
+      "tryNote": "On the <link>analyze page</link>, use the heatmap toggle to overlay it on any result."
     }
   },
   "auth": {
