@@ -51,6 +51,14 @@ export async function getHealth(): Promise<{ status: string; mock: boolean }> {
   return { status, mock };
 }
 
+// Fire-and-forget wake-up call: free-tier hosts put the API to sleep after
+// idle minutes, and a cold start takes ~50s — pinging /health on first page
+// load hides that behind the user's reading time. No timeout on purpose (the
+// request must stay alive long enough to trigger the wake); outcome ignored.
+export function warmUpApi(): void {
+  void fetch(`${BASE}/health`, { cache: "no-store" }).catch(() => undefined);
+}
+
 // Shared transport: fetch with an AbortController timeout and the common
 // error mapping (400 -> bad_file, other !ok -> server, abort -> timeout,
 // fetch rejection -> network). Returns the unvalidated JSON body.

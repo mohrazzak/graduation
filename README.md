@@ -55,6 +55,27 @@ messages instead of crashing.
 `NEXT_PUBLIC_*` values are baked into the web bundle **at image build time**,
 so after editing `.env` rebuild with `docker compose up --build`.
 
+## Live deployment (free tier)
+
+| Piece | Where | URL |
+| ----- | ----- | --- |
+| Web (Next.js) | Vercel | https://project.razzak.me |
+| API (FastAPI mock) | Render free | https://graduation-3cr9.onrender.com |
+| Auth + DB + storage | Supabase cloud | — |
+
+Production env: Vercel holds `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_API_URL` (the Render URL);
+Render holds `MOCK_MODE=true` and `CORS_ORIGINS=https://project.razzak.me`.
+Render's repo settings: Dockerfile path `./Dockerfile` (the root-context
+[Dockerfile](Dockerfile) built for Render), root directory empty.
+
+**Free-tier note:** Render spins the API down after ~15 idle minutes; the
+first request then takes ~50 s. The web app pings `/health` automatically on
+every page load (`components/layout/ApiWarmup.tsx`), so the API usually wakes
+while the visitor is still reading — for demo day, open the site a minute
+before presenting. The API is demo-grade: no rate limiting or auth on
+`/predict`.
+
 ## Deploy on a VPS
 
 [docker-compose.prod.yml](docker-compose.prod.yml) is a self-contained

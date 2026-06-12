@@ -5,6 +5,7 @@ import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
+import { ApiWarmup } from "@/components/layout/ApiWarmup";
 import { Footer } from "@/components/layout/Footer";
 import { Navbar } from "@/components/layout/Navbar";
 import { archivo, cairo, inter, jetbrainsMono } from "@/lib/fonts";
@@ -48,6 +49,9 @@ export default async function LocaleLayout({
     >
       <body className="flex min-h-full flex-col bg-bg text-text">
         <NextIntlClientProvider>
+          {/* Fire-and-forget API wake-up — free-tier hosting cold start (~50s)
+              hides behind the user's first moments on any page. */}
+          <ApiWarmup />
           <Navbar />
           {/* flex-1 in the body column gives the landmark its viewport-filling min-height. */}
           <main className="flex flex-1 flex-col">{children}</main>
