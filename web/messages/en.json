@@ -1,6 +1,7 @@
 {
   "common": {
     "appName": "DamageScale",
+    "levelDigit": "L{id}",
     "actions": {
       "analyzePhoto": "Analyze photo",
       "saveResult": "Save result",

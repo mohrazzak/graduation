@@ -5,6 +5,8 @@ import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
+import { Footer } from "@/components/layout/Footer";
+import { Navbar } from "@/components/layout/Navbar";
 import {
   archivo,
   ibmPlexSansArabic,
@@ -50,7 +52,12 @@ export default async function LocaleLayout({
       className={`${archivo.variable} ${inter.variable} ${jetbrainsMono.variable} ${ibmPlexSansArabic.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-bg text-text">
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        <NextIntlClientProvider>
+          <Navbar />
+          {/* flex-1 in the body column gives the landmark its viewport-filling min-height. */}
+          <main className="flex flex-1 flex-col">{children}</main>
+          <Footer />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

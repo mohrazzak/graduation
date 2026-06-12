@@ -1,6 +1,8 @@
-// Placeholder landing page so /en and /ar are testable end-to-end.
-// Replaced by the real landing in Task 1.6.
-import { getTranslations, setRequestLocale } from "next-intl/server";
+// Landing: hero with the animated SCALE, the three-step process, and the six levels.
+import { setRequestLocale } from "next-intl/server";
+import { Hero } from "@/components/landing/Hero";
+import { HowItWorksSection } from "@/components/landing/HowItWorksSection";
+import { LevelsGrid } from "@/components/landing/LevelsGrid";
 
 interface LandingPageProps {
   params: Promise<{ locale: string }>;
@@ -8,14 +10,14 @@ interface LandingPageProps {
 
 export default async function LandingPage({ params }: LandingPageProps) {
   const { locale } = await params;
+  // Opts the page into static rendering despite next-intl's request access.
   setRequestLocale(locale);
-  const t = await getTranslations("landing");
 
   return (
-    <main className="flex flex-1 items-center justify-center p-8">
-      <h1 className="text-center text-4xl font-extrabold uppercase tracking-tight">
-        {t("heroTitle")}
-      </h1>
-    </main>
+    <>
+      <Hero />
+      <HowItWorksSection />
+      <LevelsGrid />
+    </>
   );
 }
