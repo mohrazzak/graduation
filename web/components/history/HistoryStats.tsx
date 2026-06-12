@@ -47,16 +47,19 @@ export function HistoryStats({ analyses }: HistoryStatsProps) {
             {DAMAGE_LEVELS.map((level, index) => {
               const count = counts[level.id] ?? 0;
               return (
-                <li key={level.id} className="flex h-full flex-1 flex-col justify-end gap-1">
-                  <motion.span
-                    className="block w-full"
-                    style={{ backgroundColor: level.color }}
-                    initial={reduced ? false : { height: "0%" }}
-                    animate={{ height: `${Math.max((count / max) * 100, 3)}%` }}
-                    transition={
-                      reduced ? { duration: 0 } : { duration: 0.4, delay: index * STAGGER_S }
-                    }
-                  />
+                <li key={level.id} className="flex h-full flex-1 flex-col gap-1">
+                  {/* The track owns the percentage context; the label below never steals height. */}
+                  <span className="relative block min-h-0 flex-1">
+                    <motion.span
+                      className="absolute inset-x-0 bottom-0 block"
+                      style={{ backgroundColor: level.color }}
+                      initial={reduced ? false : { height: "0%" }}
+                      animate={{ height: `${Math.max((count / max) * 100, 3)}%` }}
+                      transition={
+                        reduced ? { duration: 0 } : { duration: 0.4, delay: index * STAGGER_S }
+                      }
+                    />
+                  </span>
                   <span className="text-center font-mono text-[10px] text-muted">
                     {tCommon("levelDigit", { id: String(level.id) })}
                     {" "}
