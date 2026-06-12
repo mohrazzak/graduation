@@ -45,10 +45,19 @@ export function ModalShell({ labelledBy, onClose, children }: ModalShellProps) {
     const first = tabbables[0];
     const last = tabbables[tabbables.length - 1];
     if (first === undefined || last === undefined) return;
-    if (event.shiftKey && document.activeElement === first) {
+    // WHY index, not equality: right after open, focus sits on the container
+    // itself (tabIndex=-1, excluded from the list), so the first Shift+Tab
+    // would match neither `first` nor `last` and escape behind the backdrop.
+    // Anything not on a later tabbable (index <= 0) must wrap to `last`.
+    const active = document.activeElement;
+    const activeIndex =
+      active instanceof HTMLElement
+        ? Array.prototype.indexOf.call(tabbables, active)
+        : -1;
+    if (event.shiftKey && activeIndex <= 0) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
+    } else if (!event.shiftKey && active === last) {
       event.preventDefault();
       first.focus();
     }
