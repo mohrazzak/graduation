@@ -50,7 +50,8 @@
       }
     },
     "levelsTitle": "The six damage levels",
-    "levelsSub": "Every photo lands on one scale, from intact to total destruction."
+    "levelsSub": "Every photo lands on one scale, from intact to total destruction.",
+    "levelPhotoAlt": "Example building photo — {name}"
   },
   "levels": {
     "intact": {

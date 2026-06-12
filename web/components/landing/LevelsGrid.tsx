@@ -1,5 +1,6 @@
 // Landing levels section: all six damage levels as ticked cards, driven by DAMAGE_LEVELS.
 import { getLocale, getTranslations } from "next-intl/server";
+import Image from "next/image";
 import { Card } from "@/components/ui/Card";
 import { DAMAGE_LEVELS } from "@/lib/levels";
 
@@ -23,6 +24,15 @@ export async function LevelsGrid() {
         {DAMAGE_LEVELS.map((level) => (
           <li key={level.id}>
             <Card ticks className="h-full">
+              <div className="relative mb-4 aspect-3/2 overflow-hidden rounded border border-line">
+                <Image
+                  src={`/landing/level-${level.id}.jpg`}
+                  alt={t("landing.levelPhotoAlt", { name: t(`levels.${level.key}.name`) })}
+                  fill
+                  sizes="(min-width: 1024px) 360px, (min-width: 640px) 50vw, 100vw"
+                  className="object-cover grayscale-60"
+                />
+              </div>
               <div className="flex items-center gap-3">
                 <span
                   aria-hidden="true"
