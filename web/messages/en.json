@@ -91,6 +91,7 @@
     "confidence": "Confidence",
     "heatmapShow": "Show heatmap",
     "heatmapHide": "Hide heatmap",
+    "heatmapAlt": "Grad-CAM heatmap overlay marking the regions that influenced the verdict",
     "savedToast": "Saved to history.",
     "savedLink": "View history",
     "errors": {
