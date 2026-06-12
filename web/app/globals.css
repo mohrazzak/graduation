@@ -97,3 +97,24 @@ body::before {
     scroll-behavior: auto !important;
   }
 }
+
+/* PDF inspection report (premium-upgrade A4): on screen the report document
+   is display:none; under print it is the ONLY thing that renders, on white. */
+.report-doc {
+  display: none;
+}
+@media print {
+  body > *:not(.report-doc) {
+    display: none !important;
+  }
+  body::before {
+    display: none; /* film grain off */
+  }
+  body {
+    background: #fff;
+  }
+  .report-doc {
+    display: block;
+    color: #111;
+  }
+}

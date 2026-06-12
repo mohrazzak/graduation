@@ -3,6 +3,7 @@
 // scan -> POST /predict -> result + auto-save, owning preview/request lifecycles.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { ReportDocument } from "@/components/report/ReportDocument";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import { ApiError, predictDamage, type ApiErrorKind } from "@/lib/api";
@@ -35,6 +36,10 @@ export function AnalyzeClient() {
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [heatmapVisible, setHeatmapVisible] = useState(false);
   const [errorKind, setErrorKind] = useState<ApiErrorKind>("server");
+  // Report identity is fixed the moment the verdict lands; deriving it at
+  // render time would mint a new id/timestamp on every re-render.
+  const [reportId, setReportId] = useState<string | null>(null);
+  const [reportedAt, setReportedAt] = useState<Date | null>(null);
   const { status: saveStatus, errorCode: saveError, save, reset: resetSave } = useSaveAnalysis();
   // Monotonic id: any result landing after a reset/new selection is discarded.
   const requestIdRef = useRef(0);
@@ -60,6 +65,8 @@ export function AnalyzeClient() {
       setPreviewUrl(url);
       setPrediction(null);
       setHeatmapVisible(false);
+      setReportId(null);
+      setReportedAt(null);
       resetSave();
       setPhase("ready");
     },
@@ -76,6 +83,8 @@ export function AnalyzeClient() {
       if (requestId !== requestIdRef.current) return; // stale: user moved on
       setPrediction(result);
       setPhase("done");
+      setReportId(crypto.randomUUID().slice(0, 8).toUpperCase());
+      setReportedAt(new Date());
       save(file, result); // auto-save to history (spec section 9)
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
@@ -91,6 +100,8 @@ export function AnalyzeClient() {
     setPreviewUrl(null);
     setPrediction(null);
     setHeatmapVisible(false);
+    setReportId(null);
+    setReportedAt(null);
     resetSave();
     setPhase("idle");
   }, [releasePreview, resetSave]);
@@ -130,6 +141,9 @@ export function AnalyzeClient() {
                 onToggle={() => setHeatmapVisible((visible) => !visible)}
               />
             ) : null}
+            <Button variant="ghost" onClick={() => window.print()}>
+              {t("report.button")}
+            </Button>
             <Button variant="ghost" onClick={reset}>
               {t("common.actions.analyzeAnother")}
             </Button>
@@ -143,6 +157,17 @@ export function AnalyzeClient() {
         ) : null}
         {phase === "error" ? (
           <AnalyzeError kind={errorKind} onRetry={() => void submit()} onReset={reset} />
+        ) : null}
+        {phase === "done" && prediction !== null && reportId !== null && reportedAt !== null ? (
+          <ReportDocument
+            imageSrc={previewUrl}
+            heatmapSrc={heatmapSrc === null ? null : `data:image/png;base64,${heatmapSrc}`}
+            level={prediction.level}
+            confidence={prediction.confidence}
+            probabilities={prediction.probabilities}
+            reportId={reportId}
+            createdAt={reportedAt}
+          />
         ) : null}
       </div>
 

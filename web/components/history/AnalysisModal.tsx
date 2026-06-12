@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { ConfidenceBars } from "@/components/analyze/ConfidenceBars";
 import { HeatmapToggle } from "@/components/analyze/HeatmapToggle";
 import { ImageWithHeatmap } from "@/components/analyze/ImageWithHeatmap";
+import { ReportDocument } from "@/components/report/ReportDocument";
 import { Button } from "@/components/ui/Button";
 import { ScaleStrip } from "@/components/ui/ScaleStrip";
 import { getLevel, isAlertLevel } from "@/lib/levels";
@@ -131,6 +132,9 @@ export function AnalysisModal({
             disabled={heatmapUrl === null}
           />
         ) : null}
+        <Button variant="ghost" onClick={() => window.print()}>
+          {t("report.button")}
+        </Button>
         {confirming ? (
           <>
             <span className="text-sm text-muted">{t("history.deleteConfirm")}</span>
@@ -158,6 +162,16 @@ export function AnalysisModal({
           {t("history.deleteFailed")}
         </p>
       ) : null}
+      {/* Portals onto <body>; print-only (globals.css hides everything else). */}
+      <ReportDocument
+        imageSrc={imageUrl}
+        heatmapSrc={heatmapUrl}
+        level={analysis.level}
+        confidence={analysis.confidence}
+        probabilities={analysis.probabilities}
+        reportId={analysis.id.slice(0, 8).toUpperCase()}
+        createdAt={new Date(analysis.created_at)}
+      />
     </ModalShell>
   );
 }
