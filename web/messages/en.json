@@ -100,6 +100,7 @@
     "heatmapShow": "Show heatmap",
     "heatmapHide": "Hide heatmap",
     "heatmapAlt": "Grad-CAM heatmap overlay marking the regions that influenced the verdict",
+    "heatmapReveal": "Heatmap reveal",
     "savedToast": "Saved to history.",
     "savedLink": "View history",
     "resultAnnouncement": "Assessment complete: {name}.",

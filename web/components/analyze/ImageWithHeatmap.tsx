@@ -1,8 +1,9 @@
 "use client";
 // The photo + Grad-CAM overlay pattern shared by the analyze flow and the
 // history detail modal: heatmap fades in over the image at 45% opacity.
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
+import { HeatmapRevealLayer } from "@/components/analyze/HeatmapRevealLayer";
 
 export interface ImageWithHeatmapProps {
   src: string;
@@ -40,15 +41,12 @@ export function ImageWithHeatmap({
       <img src={src} alt={alt} className="block w-full" />
       <AnimatePresence>
         {heatmapVisible && heatmapSrc !== null ? (
-          <motion.img
+          <HeatmapRevealLayer
             key="heatmap"
             src={heatmapSrc}
             alt={heatmapAlt}
-            initial={reduced ? false : { opacity: 0 }}
-            animate={{ opacity: HEATMAP_OPACITY }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: reduced ? 0 : 0.2 }}
-            className="absolute inset-0 h-full w-full"
+            opacity={HEATMAP_OPACITY}
+            fadeDuration={reduced ? 0 : 0.2}
           />
         ) : null}
       </AnimatePresence>
