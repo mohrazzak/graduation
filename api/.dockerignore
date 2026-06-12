@@ -1,0 +1,20 @@
+# Keep the API runtime image minimal: only application code + requirements.txt
+# go in. The venv and caches are host artifacts; tests and dev tooling
+# (pytest/ruff config) are deliberately EXCLUDED because they run on the host
+# or in CI — the runtime container never executes them, so shipping them only
+# grows the image.
+.venv
+__pycache__
+**/__pycache__
+.pytest_cache
+.ruff_cache
+tests
+requirements-dev.txt
+pyproject.toml
+
+# MOCK_MODE / CORS_ORIGINS arrive as runtime environment (docker-compose.yml),
+# never from a baked-in env file.
+.env*
+
+Dockerfile
+.dockerignore

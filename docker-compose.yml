@@ -1,0 +1,41 @@
+# DamageScale one-command demo: `docker compose up` -> web :3000 + api :8000.
+# Configuration comes from an optional root `.env` (cp .env.example .env);
+# every ${VAR:-default} below falls back to a safe value, so compose also
+# works with no .env file at all (Supabase then stays in placeholder mode).
+#
+# NETWORKING — CRITICAL, read before deploying anywhere but localhost:
+# The BROWSER (not the web container) calls the API, so NEXT_PUBLIC_API_URL
+# must be an origin reachable from the user's machine — the default
+# http://localhost:8000 — NOT http://api:8000, which only resolves on the
+# internal compose network. For the university-server demo, set in .env:
+#   NEXT_PUBLIC_API_URL=http://<server-host>:8000
+#   CORS_ORIGINS=http://<server-host>:3000
+# then run `docker compose up --build`: NEXT_PUBLIC_* are baked into the web
+# bundle at image BUILD time (see web/Dockerfile), while CORS_ORIGINS is
+# plain runtime env and needs only a container restart.
+services:
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      # Runtime-switchable: flip to false once the trained model lands in
+      # api/predict/model.py — no image rebuild of web required.
+      MOCK_MODE: ${MOCK_MODE:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+
+  web:
+    build:
+      context: ./web
+      args:
+        # Build args, not runtime env: Next.js inlines NEXT_PUBLIC_* at build
+        # time. The `:-` form also covers EMPTY values, so an unfilled .env
+        # falls back to the same placeholders as web/.env.local (auth shows
+        # translated "not configured" errors until Supabase is provisioned).
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-https://placeholder.supabase.co}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-placeholder-anon-key}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api

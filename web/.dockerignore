@@ -1,0 +1,19 @@
+# Keep the web build context minimal and credential-free.
+# node_modules/.next are rebuilt inside the image (npm ci + next build), so
+# host copies would only slow the context upload and leak host-specific state.
+node_modules
+.next
+out
+coverage
+*.tsbuildinfo
+
+# ALL env files stay out — including .env.example, which the Dockerfile never
+# reads. NEXT_PUBLIC_* configuration enters exclusively as build args (see
+# Dockerfile), so no env file can accidentally bake a credential into a layer.
+.env*
+
+# Image-build plumbing and docs add nothing to the build itself.
+Dockerfile
+.dockerignore
+README.md
+npm-debug.log*

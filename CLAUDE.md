@@ -8,6 +8,12 @@ the result is saved to the user's personal history.
 endpoint (`MOCK_MODE=true`). The real model plugs into `api/predict/model.py`
 later with ZERO frontend changes.
 
+**Build status:** spec phases 1–7 are implemented (scaffold → auth → mock API
+→ analyze → persistence → polish → docker/README). The one pending manual step
+is Supabase cloud provisioning (see README.md); until then `web/.env.local`
+holds placeholders and auth/history degrade to translated "not configured"
+errors by design.
+
 Authoritative documents — read before changing anything:
 
 - Spec (follow exactly): [docs/superpowers/specs/2026-06-12-damagescale-design.md](docs/superpowers/specs/2026-06-12-damagescale-design.md)
