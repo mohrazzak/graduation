@@ -1,7 +1,7 @@
 "use client";
 // Shared login/register form: inline validation, Supabase sign-in/up via
 // lib/supabase/auth, and a locale-aware redirect once the session exists.
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { ConfirmationNotice } from "@/components/auth/ConfirmationNotice";
 import { PasswordToggle } from "@/components/auth/PasswordToggle";
@@ -56,6 +56,17 @@ export function AuthForm({ mode, nextPath }: AuthFormProps) {
   const [confirmationRequired, setConfirmationRequired] = useState(false);
   const [pending, setPending] = useState(false);
   const targetPath = nextPath ?? "/analyze";
+
+  useEffect(() => {
+    // bfcache back-navigation restores this page with pending frozen true
+    // (we deliberately keep the spinner through the unload) — reset it so a
+    // restored form is usable again.
+    const onPageShow = (event: PageTransitionEvent): void => {
+      if (event.persisted) setPending(false);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
