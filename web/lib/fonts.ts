@@ -1,11 +1,7 @@
 // Three typographic roles — display (Archivo), body (Inter), data (JetBrains Mono) —
-// plus the Arabic variant (IBM Plex Sans Arabic) are part of the design identity (spec section 8).
-import {
-  Archivo,
-  IBM_Plex_Sans_Arabic,
-  Inter,
-  JetBrains_Mono,
-} from "next/font/google";
+// plus the Arabic variant (Cairo) are part of the design identity (spec section 8,
+// Arabic font amended by specs/2026-06-12-landing-imagery-cairo-design.md).
+import { Archivo, Cairo, Inter, JetBrains_Mono } from "next/font/google";
 
 export const archivo = Archivo({
   weight: ["700", "800", "900"],
@@ -23,8 +19,10 @@ export const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
 });
 
-export const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
-  weight: ["400", "500", "600", "700"],
-  subsets: ["arabic"],
+// Cairo reaches weight 900 (Plex Arabic stopped at 700), giving Arabic display
+// headings the same heavy punch as Archivo's Latin ones.
+export const cairo = Cairo({
+  weight: ["400", "500", "600", "700", "800", "900"],
+  subsets: ["arabic", "latin"],
   variable: "--font-arabic",
 });

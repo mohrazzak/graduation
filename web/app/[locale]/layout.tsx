@@ -7,12 +7,7 @@ import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { Footer } from "@/components/layout/Footer";
 import { Navbar } from "@/components/layout/Navbar";
-import {
-  archivo,
-  ibmPlexSansArabic,
-  inter,
-  jetbrainsMono,
-} from "@/lib/fonts";
+import { archivo, cairo, inter, jetbrainsMono } from "@/lib/fonts";
 import "../globals.css";
 
 interface LocaleLayoutProps {
@@ -49,7 +44,7 @@ export default async function LocaleLayout({
     <html
       lang={locale}
       dir={locale === "ar" ? "rtl" : "ltr"}
-      className={`${archivo.variable} ${inter.variable} ${jetbrainsMono.variable} ${ibmPlexSansArabic.variable} h-full antialiased`}
+      className={`${archivo.variable} ${inter.variable} ${jetbrainsMono.variable} ${cairo.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-bg text-text">
         <NextIntlClientProvider>

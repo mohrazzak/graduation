@@ -18,7 +18,7 @@
   --radius-DEFAULT: 4px;
 }
 
-/* Arabic remaps display + body roles to IBM Plex Sans Arabic; the data role
+/* Arabic remaps display + body roles to Cairo; the data role
    stays JetBrains Mono — monospace digits are part of the identity (spec section 8). */
 html[dir="rtl"] {
   --font-display: var(--font-arabic);
@@ -26,7 +26,7 @@ html[dir="rtl"] {
   /* WHY the mono fallback: next-intl formatters emit Arabic-Indic digits in /ar,
      and JetBrains Mono has no Arabic glyphs — without this they would fall back
      to an arbitrary system font. Latin glyphs (the "L4" brand digits) still hit
-     JetBrains Mono first; Arabic-Indic digits render in IBM Plex Sans Arabic. */
+     JetBrains Mono first; Arabic-Indic digits render in Cairo. */
   --font-mono: var(--font-jetbrains), var(--font-arabic);
 }
 
@@ -47,7 +47,7 @@ html {
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
-  /* --font-body resolves per locale (Inter / IBM Plex Sans Arabic via the dir remap above). */
+  /* --font-body resolves per locale (Inter / Cairo via the dir remap above). */
   font-family: var(--font-body);
 }
 

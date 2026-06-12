@@ -229,7 +229,7 @@ TYPOGRAPHY (3 roles, via next/font):
   Body    : "Inter" — regular UI text.
   Data    : "JetBrains Mono" — ALL numbers, percentages, timestamps, level
             digits. Monospace numerals are part of the identity.
-  Arabic  : "IBM Plex Sans Arabic" for body/display when locale=ar.
+  Arabic  : "Cairo" for body/display when locale=ar. (amended 2026-06-12, see landing-imagery-cairo design doc)
 
 SIGNATURE ELEMENT — "THE SCALE":
   A horizontal 6-segment damage scale (L0->L5 ramp colors) is the brand mark.

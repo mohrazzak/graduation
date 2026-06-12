@@ -117,7 +117,7 @@ docker compose up        # web :3000 + api :8000
   `line #2A2A2F`, `text #EDEDEF`, `muted #8B8B93`, `hazard #FFB000` (accent,
   CTAs, focus rings), `alert #FF3B30` (levels 4–5 ONLY).
 - Fonts: Archivo (display, uppercase), Inter (body), JetBrains Mono (ALL
-  numbers/percentages/timestamps/level digits), IBM Plex Sans Arabic (ar).
+  numbers/percentages/timestamps/level digits), Cairo (ar).
 - Signature motif: **THE SCALE** — 6-segment strip (`components/ui/ScaleStrip`)
   reused in navbar logo, landing hero (animated), analyze result, history cards.
 - Restraint: border radius ≤ 4px, hairline `line` borders, corner tick marks on
