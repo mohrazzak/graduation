@@ -5,6 +5,12 @@ import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
+import {
+  archivo,
+  ibmPlexSansArabic,
+  inter,
+  jetbrainsMono,
+} from "@/lib/fonts";
 import "../globals.css";
 
 interface LocaleLayoutProps {
@@ -36,10 +42,12 @@ export default async function LocaleLayout({
   setRequestLocale(locale);
 
   return (
+    // Font variables live on <html> so the html[dir="rtl"] role remap in
+    // globals.css can resolve var(--font-arabic) at the element it is declared on.
     <html
       lang={locale}
       dir={locale === "ar" ? "rtl" : "ltr"}
-      className="h-full antialiased"
+      className={`${archivo.variable} ${inter.variable} ${jetbrainsMono.variable} ${ibmPlexSansArabic.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-bg text-text">
         <NextIntlClientProvider>{children}</NextIntlClientProvider>
