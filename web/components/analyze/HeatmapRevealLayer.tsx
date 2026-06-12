@@ -19,14 +19,15 @@ export function HeatmapRevealLayer({ src, alt, opacity, fadeDuration }: HeatmapR
   const [reveal, setReveal] = useState(100);
   const hidden = 100 - reveal;
   // clip-path has no logical-property form; mirror the inset side by dir.
-  // SSR-safe: at reveal=100 both branches are inset(0 0 0 0), so first paint
-  // matches regardless of document availability.
+  // SSR-safe: at reveal=100 both branches compute to a no-op clip, so the
+  // first client paint is identical either way (and the layer only ever
+  // mounts client-side).
   const rtl = typeof document !== "undefined" && document.dir === "rtl";
   const clipPath = rtl ? `inset(0 0 0 ${hidden}%)` : `inset(0 ${hidden}% 0 0)`;
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
+      initial={fadeDuration === 0 ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: fadeDuration }}
@@ -49,7 +50,7 @@ export function HeatmapRevealLayer({ src, alt, opacity, fadeDuration }: HeatmapR
         value={reveal}
         aria-label={t("heatmapReveal")}
         onChange={(event) => setReveal(Number(event.target.value))}
-        className="absolute inset-x-3 bottom-3 h-1 cursor-ew-resize appearance-none rounded-none bg-line accent-hazard"
+        className="absolute inset-x-0 bottom-2 h-6 cursor-ew-resize appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:bg-line [&::-webkit-slider-thumb]:-mt-1.5 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-none [&::-webkit-slider-thumb]:bg-hazard [&::-moz-range-track]:h-1 [&::-moz-range-track]:bg-line [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-2 [&::-moz-range-thumb]:rounded-none [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-hazard"
       />
     </motion.div>
   );
