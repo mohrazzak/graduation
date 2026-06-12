@@ -1,3 +1,5 @@
-pytest
-httpx
-ruff
+# Exact pins of the verified working set in api/.venv (pip freeze, direct deps
+# only) — demo-day insurance against a breaking release landing overnight.
+pytest==9.0.3
+httpx==0.28.1
+ruff==0.15.17
