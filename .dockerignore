@@ -1,0 +1,10 @@
+# Root build context is only used by the Render Dockerfile, which copies
+# api/ alone — keep everything else out of the context for fast uploads.
+web
+docs
+deploy
+supabase
+.git
+.env*
+*.md
+docker-compose*.yml
