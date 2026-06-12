@@ -1,0 +1,9 @@
+# Caddy terminates HTTPS (automatic Let's Encrypt) and proxies to the two
+# services on the internal compose network. Domains come from .env.
+{$DOMAIN_WEB} {
+	reverse_proxy web:3000
+}
+
+{$DOMAIN_API} {
+	reverse_proxy api:8000
+}

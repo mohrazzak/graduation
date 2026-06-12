@@ -1,0 +1,53 @@
+# Production stack for a VPS: docker compose -f docker-compose.prod.yml up -d --build
+# Prereqs: root .env filled (Supabase keys, NEXT_PUBLIC_API_URL=https://$DOMAIN_API,
+# CORS_ORIGINS=https://$DOMAIN_WEB, DOMAIN_WEB, DOMAIN_API) and both domains'
+# DNS A records pointing at this machine. Caddy fetches TLS automatically.
+services:
+  api:
+    build: ./api
+    restart: unless-stopped
+    environment:
+      MOCK_MODE: ${MOCK_MODE:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS in .env}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set in .env}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set in .env}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set in .env}
+    restart: unless-stopped
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/en').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN_WEB: ${DOMAIN_WEB:?set DOMAIN_WEB in .env}
+      DOMAIN_API: ${DOMAIN_API:?set DOMAIN_API in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:

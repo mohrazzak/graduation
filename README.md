@@ -55,6 +55,46 @@ messages instead of crashing.
 `NEXT_PUBLIC_*` values are baked into the web bundle **at image build time**,
 so after editing `.env` rebuild with `docker compose up --build`.
 
+## Deploy on a VPS
+
+[docker-compose.prod.yml](docker-compose.prod.yml) is a self-contained
+production stack: web + api + a [Caddy](https://caddyserver.com) reverse proxy
+that terminates HTTPS with automatic Let's Encrypt certificates
+([deploy/Caddyfile](deploy/Caddyfile)).
+
+1. Point **DNS A records** for both hostnames (e.g. `project.example.com` and
+   `api.example.com`) at the VPS IP. Cloudflare users: keep the orange-cloud
+   proxy **OFF** (DNS only) at least until the first certificate issues.
+2. Open ports **80** and **443** on the VPS firewall.
+3. Configure the environment:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Fill in the Supabase URL + anon key, then set:
+
+   ```bash
+   NEXT_PUBLIC_API_URL=https://<DOMAIN_API>   # e.g. https://api.example.com
+   CORS_ORIGINS=https://<DOMAIN_WEB>          # e.g. https://project.example.com
+   DOMAIN_WEB=<your web hostname>
+   DOMAIN_API=<your api hostname>
+   ```
+
+4. Launch:
+
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d --build
+   ```
+
+Notes:
+
+- web and api publish **no host ports** — Caddy is the only public entrypoint
+  and proxies to them over the internal compose network.
+- `NEXT_PUBLIC_*` values are baked into the web bundle **at build time**:
+  after changing any of them, rebuild with
+  `docker compose -f docker-compose.prod.yml up -d --build`.
+
 ## Supabase setup (one-time, dashboard)
 
 1. Create a project at <https://supabase.com/dashboard> and copy the
