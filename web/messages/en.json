@@ -161,6 +161,7 @@
       "emailTaken": "This email is already registered. Log in instead.",
       "weakPassword": "Password must be at least 8 characters.",
       "networkError": "The server is unreachable. Check your connection, then retry.",
+      "notConfigured": "Supabase is not configured yet. Add the project URL and anon key to web/.env.local, then retry.",
       "required": "This field is required.",
       "invalidEmail": "Enter a valid email address."
     }
