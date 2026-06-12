@@ -1,6 +1,7 @@
 // How-it-works: public methodology page — the scale in depth, dataset/model/metrics
 // placeholders structured for real numbers after training, and the Grad-CAM explainer.
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { PageBackdrop } from "@/components/layout/PageBackdrop";
 import { DatasetSection } from "@/components/how-it-works/DatasetSection";
 import { GradCamSection } from "@/components/how-it-works/GradCamSection";
 import { MetricsSection } from "@/components/how-it-works/MetricsSection";
@@ -19,6 +20,7 @@ export default async function HowItWorksPage({ params }: HowItWorksPageProps) {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10">
+      <PageBackdrop src="/backgrounds/how-it-works.jpg" />
       <h1 className="font-display text-3xl font-black uppercase tracking-tight">
         {t("title")}
       </h1>

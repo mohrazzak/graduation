@@ -2,6 +2,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { AuthForm } from "@/components/auth/AuthForm";
+import { PageBackdrop } from "@/components/layout/PageBackdrop";
 import { Card } from "@/components/ui/Card";
 import { sanitizeNextPath } from "@/lib/validation";
 
@@ -24,6 +25,7 @@ export default async function RegisterPage({
 
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-12">
+      <PageBackdrop src="/backgrounds/auth.jpg" />
       <Card ticks className="w-full max-w-sm">
         <h1 className="font-display text-lg font-extrabold uppercase tracking-tight">
           {t("title")}

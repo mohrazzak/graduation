@@ -1,6 +1,7 @@
 // Designed 404 (spec sections 3 + 7): quiet instrument-style "no such route"
 // state, rendered inside the locale layout so navbar/footer/dir stay correct.
 import { useTranslations } from "next-intl";
+import { PageBackdrop } from "@/components/layout/PageBackdrop";
 import { Button } from "@/components/ui/Button";
 
 export default function NotFound() {
@@ -8,6 +9,7 @@ export default function NotFound() {
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4 py-20 text-center">
+      <PageBackdrop src="/backgrounds/404.jpg" />
       {/* Mono digits: the data voice carries the status code, like a readout. */}
       <p className="font-mono text-7xl font-bold leading-none text-muted">{t("code")}</p>
       <h1 className="font-display text-2xl font-extrabold uppercase tracking-tight">
