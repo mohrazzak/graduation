@@ -72,11 +72,15 @@ export function HistoryClient() {
       setSelected(analysis);
       // Heatmap URLs are signed lazily — only an opened analysis needs one —
       // and cached per id so reopening costs nothing and late results cannot
-      // attach to the wrong analysis.
+      // attach to the wrong analysis. Only SUCCESSFUL URLs are cached: a
+      // transient signing failure re-signs on the next open instead of
+      // disabling the heatmap toggle for the rest of the session.
       if (analysis.heatmap_path !== null && heatmapUrls[analysis.id] === undefined) {
         const path = analysis.heatmap_path;
         void getSignedUrl(path).then(({ data }) => {
-          setHeatmapUrls((urls) => ({ ...urls, [analysis.id]: data }));
+          if (data !== null) {
+            setHeatmapUrls((urls) => ({ ...urls, [analysis.id]: data }));
+          }
         });
       }
     },

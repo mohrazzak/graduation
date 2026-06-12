@@ -27,7 +27,32 @@ export function ModalShell({ labelledBy, onClose, children }: ModalShellProps) {
     const opener =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialogRef.current?.focus();
-    return () => opener?.focus();
+    return () => {
+      if (opener !== null && opener.isConnected) {
+        opener.focus();
+        return;
+      }
+      // WHY the fallback: after a successful delete the opener card is gone,
+      // and focus would otherwise drop to <body>, stranding keyboard and
+      // screen-reader users. The <main> landmark always exists (locale layout)
+      // and is a stable, sensible place to resume from.
+      const main = document.querySelector("main");
+      if (main instanceof HTMLElement) {
+        main.tabIndex = -1;
+        main.focus();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // WHY lock body scroll: wheel/touch scrolling on the backdrop would move
+    // the page behind the dialog, disorienting the user on close. Restore the
+    // PREVIOUS inline value (not "") so any pre-existing style survives.
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
   }, []);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {

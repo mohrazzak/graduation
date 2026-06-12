@@ -94,6 +94,7 @@
     "heatmapAlt": "Grad-CAM heatmap overlay marking the regions that influenced the verdict",
     "savedToast": "Saved to history.",
     "savedLink": "View history",
+    "resultAnnouncement": "Assessment complete: {name}.",
     "errors": {
       "badFileType": "Unsupported file type. Upload a JPEG, PNG or WebP image.",
       "fileTooLarge": "File exceeds 10 MB. Resize or compress the photo, then retry.",
@@ -201,6 +202,12 @@
   },
   "errors": {
     "generic": "The request failed. Reload the page, then retry."
+  },
+  "notFound": {
+    "code": "404",
+    "title": "Page not found",
+    "body": "This address does not match any route in the app. Check the URL, or return to the start.",
+    "cta": "Back to home"
   },
   "localeSwitcher": {
     "en": "EN",

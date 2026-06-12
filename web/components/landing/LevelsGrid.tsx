@@ -1,10 +1,17 @@
 // Landing levels section: all six damage levels as ticked cards, driven by DAMAGE_LEVELS.
-import { useTranslations } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
 import { Card } from "@/components/ui/Card";
 import { DAMAGE_LEVELS } from "@/lib/levels";
 
-export function LevelsGrid() {
-  const t = useTranslations();
+export async function LevelsGrid() {
+  const locale = await getLocale();
+  // Spec section 9: each card shows the Arabic AND English level name. The
+  // secondary name comes from the OTHER locale's catalog, loaded explicitly.
+  const otherLocale = locale === "ar" ? "en" : "ar";
+  const [t, tOther] = await Promise.all([
+    getTranslations(),
+    getTranslations({ locale: otherLocale, namespace: "levels" }),
+  ]);
 
   return (
     <section className="mx-auto w-full max-w-6xl px-4 py-16">
@@ -29,7 +36,14 @@ export function LevelsGrid() {
               <h3 className="mt-3 font-display text-base font-bold uppercase">
                 {t(`levels.${level.key}.name`)}
               </h3>
-              <p className="mt-1 text-sm text-muted">{t(`levels.${level.key}.description`)}</p>
+              <p className="mt-0.5 text-xs text-muted">
+                {/* Inline span keeps the card's start-alignment while lang+dir
+                    give the other-locale name correct bidi shaping + AT voice. */}
+                <span lang={otherLocale} dir={otherLocale === "ar" ? "rtl" : "ltr"}>
+                  {tOther(`${level.key}.name`)}
+                </span>
+              </p>
+              <p className="mt-2 text-sm text-muted">{t(`levels.${level.key}.description`)}</p>
             </Card>
           </li>
         ))}

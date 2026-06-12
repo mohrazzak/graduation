@@ -35,7 +35,9 @@ const LOCALE_PREFIX = new RegExp(`^/(?:${routing.locales.join("|")})(?=/|$)`);
 
 // Open-redirect prevention: a raw ?next= echoed into router.replace would let
 // crafted links bounce users to attacker sites ("//evil.com" is scheme-relative,
-// "\" is normalized to "/" by browsers). Only same-app paths survive.
+// "\" is normalized to "/" by browsers). Only same-app paths survive — the
+// guards run both before AND after the locale strip, because stripping can
+// itself manufacture a scheme-relative path ("/en//evil.com" -> "//evil.com").
 export function sanitizeNextPath(
   raw: string | string[] | undefined,
 ): string | null {
@@ -51,5 +53,8 @@ export function sanitizeNextPath(
   // Middleware sends locale-prefixed paths ("/en/analyze") but the i18n router
   // expects locale-less hrefs and re-adds the active locale itself.
   const stripped = candidate.replace(LOCALE_PREFIX, "");
+  if (stripped.startsWith("//") || stripped.includes("\\")) {
+    return null;
+  }
   return stripped === "" ? "/" : stripped;
 }

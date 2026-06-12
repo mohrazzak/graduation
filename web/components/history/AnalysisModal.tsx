@@ -1,7 +1,7 @@
 "use client";
 // Full assessment detail inside the dialog shell: image with the shared
 // heatmap overlay, scale, confidence bars, date, and a two-step inline delete.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { ConfidenceBars } from "@/components/analyze/ConfidenceBars";
 import { HeatmapToggle } from "@/components/analyze/HeatmapToggle";
@@ -42,6 +42,16 @@ export function AnalysisModal({
   const level = getLevel(analysis.level);
   const alert = isAlertLevel(level.id);
   const levelName = t(`levels.${level.key}.name`);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    // WHY: entering confirm unmounts the Delete button out from under keyboard
+    // focus; moving focus onto Confirm keeps Tab/Enter in the delete flow
+    // instead of silently dropping to <body>.
+    if (confirming) {
+      confirmRef.current?.focus();
+    }
+  }, [confirming]);
 
   async function confirmDelete(): Promise<void> {
     setDeleting(true);
@@ -124,7 +134,12 @@ export function AnalysisModal({
         {confirming ? (
           <>
             <span className="text-sm text-muted">{t("history.deleteConfirm")}</span>
-            <Button variant="danger" disabled={deleting} onClick={() => void confirmDelete()}>
+            <Button
+              ref={confirmRef}
+              variant="danger"
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
               {t("common.actions.confirm")}
             </Button>
             <Button variant="ghost" disabled={deleting} onClick={() => setConfirming(false)}>

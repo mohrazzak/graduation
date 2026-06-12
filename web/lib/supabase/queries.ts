@@ -139,10 +139,10 @@ export async function listAnalyses(): Promise<Result<Analysis[]>> {
   return { data: analyses, error: null };
 }
 
-// Removes the stored objects, then deletes the row. Storage-removal errors
-// are non-fatal when the ROW delete succeeds — the row is the source of truth
-// for history, and an orphaned file confined to the user's own folder is
-// acceptable; a failed row delete is not.
+// Deletes the analyses ROW first, then best-effort removes the stored objects.
+// WHY this order: the row is the source of truth for history, so a failure
+// must never leave a ghost row pointing at deleted files. The reverse cost —
+// an orphaned file confined to the user's own RLS-scoped folder — is acceptable.
 export async function deleteAnalysis(analysis: Analysis): Promise<Result<null>> {
   if (!isSupabaseConfigured()) {
     return { data: null, error: "not_configured" };
@@ -153,12 +153,6 @@ export async function deleteAnalysis(analysis: Analysis): Promise<Result<null>> 
     return { data: null, error: "not_authenticated" };
   }
 
-  const paths = [analysis.image_path];
-  if (analysis.heatmap_path) {
-    paths.push(analysis.heatmap_path);
-  }
-  await removeQuietly(supabase, paths);
-
   const { error } = await supabase
     .from("analyses")
     .delete()
@@ -166,6 +160,12 @@ export async function deleteAnalysis(analysis: Analysis): Promise<Result<null>> 
   if (error) {
     return { data: null, error: "delete_failed" };
   }
+
+  const paths = [analysis.image_path];
+  if (analysis.heatmap_path) {
+    paths.push(analysis.heatmap_path);
+  }
+  await removeQuietly(supabase, paths);
   return { data: null, error: null };
 }
 

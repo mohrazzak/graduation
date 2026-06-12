@@ -3,7 +3,7 @@
 // after ~5s; optional inline link (e.g. "Saved to history" -> /history).
 import { motion, useReducedMotion } from "framer-motion";
 import { X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState, type FocusEvent } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 
@@ -19,11 +19,29 @@ const AUTO_DISMISS_MS = 5000;
 export function Toast({ message, href, linkLabel, onDismiss }: ToastProps) {
   const t = useTranslations("common.actions");
   const reduced = useReducedMotion() ?? false;
+  // WHY pause: WCAG 2.2.1 (Timing Adjustable) — auto-dismiss is a time limit,
+  // so it must hold while the user is reading or operating the toast (hover,
+  // or keyboard focus within).
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const paused = hovered || focused;
 
   useEffect(() => {
+    if (paused) return undefined;
+    // Resuming restarts the FULL duration: simpler than bookkeeping remaining
+    // milliseconds, and granting MORE reading time is the accessible direction.
     const id = window.setTimeout(onDismiss, AUTO_DISMISS_MS);
     return () => window.clearTimeout(id);
-  }, [onDismiss]);
+  }, [paused, onDismiss]);
+
+  function onBlur(event: FocusEvent<HTMLDivElement>): void {
+    // Unpause only when focus leaves the toast entirely — moving between the
+    // inline link and the close button keeps relatedTarget inside.
+    const next = event.relatedTarget;
+    if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+      setFocused(false);
+    }
+  }
 
   return (
     <motion.div
@@ -31,6 +49,10 @@ export function Toast({ message, href, linkLabel, onDismiss }: ToastProps) {
       initial={reduced ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduced ? 0 : 0.2 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={onBlur}
       className="fixed inset-x-0 bottom-6 z-50 mx-auto flex w-fit max-w-[calc(100vw-2rem)] items-center gap-4 rounded border border-line bg-surface px-4 py-3 text-sm"
     >
       <span>{message}</span>

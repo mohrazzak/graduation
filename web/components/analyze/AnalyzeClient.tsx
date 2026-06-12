@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import { ApiError, predictDamage, type ApiErrorKind } from "@/lib/api";
+import { getLevel } from "@/lib/levels";
 import type { Prediction } from "@/lib/types";
 import { AnalyzeError } from "./AnalyzeError";
 import { DropZone } from "./DropZone";
@@ -149,6 +150,16 @@ export function AnalyzeClient() {
         <Toast message={t("analyze.savedToast")} href="/history"
           linkLabel={t("analyze.savedLink")} onDismiss={resetSave} />
       ) : null}
+
+      {/* Persistent polite live region: visual focus never moves to the result,
+          so this is the screen-reader signal that the verdict landed. */}
+      <div aria-live="polite" role="status" className="sr-only">
+        {phase === "done" && prediction !== null
+          ? t("analyze.resultAnnouncement", {
+              name: t(`levels.${getLevel(prediction.level).key}.name`),
+            })
+          : null}
+      </div>
     </div>
   );
 }

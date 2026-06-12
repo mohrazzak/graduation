@@ -2,6 +2,7 @@
 // swaps between signed-out (How-it-works + Login) and signed-in (app links +
 // identity + logout) chrome. AuthForm/LogoutButton call router.refresh() so
 // this server component re-renders after every auth change.
+import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
 import type { User } from "@supabase/supabase-js";
 import { Link } from "@/i18n/navigation";
@@ -57,7 +58,12 @@ export async function Navbar() {
               <Link href="/history" className={NAV_LINK_CLASSES}>
                 {t("nav.history")}
               </Link>
-              <LocaleSwitcher />
+              {/* WHY Suspense: the switcher reads useSearchParams (to preserve
+                  the query when switching), which static prerenders require to
+                  sit under a boundary. It hydrates instantly on the client. */}
+              <Suspense>
+                <LocaleSwitcher />
+              </Suspense>
               <span
                 className="hidden max-w-[16ch] truncate text-sm text-muted lg:block"
                 title={displayNameOf(user)}
@@ -71,7 +77,10 @@ export async function Navbar() {
               <Link href="/how-it-works" className={NAV_LINK_CLASSES}>
                 {t("nav.howItWorks")}
               </Link>
-              <LocaleSwitcher />
+              {/* Same Suspense rationale as the signed-in branch above. */}
+              <Suspense>
+                <LocaleSwitcher />
+              </Suspense>
               <div className="hidden sm:block">
                 <Button href="/login" variant="ghost" size="md">
                   {t("common.actions.login")}

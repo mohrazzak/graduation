@@ -1,6 +1,6 @@
 // Action button: primary (hazard CTA with the tape-stripe top edge), ghost, danger.
 // Renders a locale-aware Link instead of <button> when `href` is provided.
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { Link } from "@/i18n/navigation";
 
 type ButtonVariant = "primary" | "ghost" | "danger";
@@ -16,6 +16,8 @@ export interface ButtonProps {
   disabled?: boolean;
   onClick?: () => void;
   className?: string;
+  /** Imperative focus target (React 19 ref-as-prop); button form only. */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 // Focus ring comes from the global :focus-visible rule — no per-variant ring classes.
@@ -44,6 +46,7 @@ export function Button({
   disabled,
   onClick,
   className,
+  ref,
 }: ButtonProps) {
   const classes = `${BASE} ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className ?? ""}`;
   const content = (
@@ -64,7 +67,7 @@ export function Button({
     );
   }
   return (
-    <button type={type} disabled={disabled} onClick={onClick} className={classes}>
+    <button ref={ref} type={type} disabled={disabled} onClick={onClick} className={classes}>
       {content}
     </button>
   );
