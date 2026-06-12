@@ -8,16 +8,23 @@ the result is saved to the user's personal history.
 endpoint (`MOCK_MODE=true`). The real model plugs into `api/predict/model.py`
 later with ZERO frontend changes.
 
-**Build status:** spec phases 1–7 are implemented (scaffold → auth → mock API
-→ analyze → persistence → polish → docker/README). The one pending manual step
-is Supabase cloud provisioning (see README.md); until then `web/.env.local`
-holds placeholders and auth/history degrade to translated "not configured"
-errors by design.
+**Build status (2026-06-12):** spec phases 1–7 shipped, Supabase cloud is
+PROVISIONED (schema + RLS + private bucket live; real URL + publishable key in
+`web/.env.local` and root `.env`, both gitignored), and the full
+register→analyze→history flow is E2E-verified in both locales. Shipped since:
+landing imagery + Cairo Arabic font, image-aware mock heatmap. In flight:
+premium upgrade (page backdrops, live scan log, heatmap reveal slider, history
+stats, PDF report) + deployment (Vercel/Render free tier at project.razzak.me,
+plus a VPS-ready Caddy compose stack). Still pending on the user: disable
+"Confirm email" in the Supabase dashboard (UI registration is blocked until
+then) and fill the footer university/supervisor placeholder names.
 
 Authoritative documents — read before changing anything:
 
-- Spec (follow exactly): [docs/superpowers/specs/2026-06-12-damagescale-design.md](docs/superpowers/specs/2026-06-12-damagescale-design.md)
-- Implementation plan: [docs/superpowers/plans/2026-06-12-damagescale.md](docs/superpowers/plans/2026-06-12-damagescale.md)
+- Master spec (follow exactly): [docs/superpowers/specs/2026-06-12-damagescale-design.md](docs/superpowers/specs/2026-06-12-damagescale-design.md)
+- Amendments: [landing imagery + Cairo](docs/superpowers/specs/2026-06-12-landing-imagery-cairo-design.md), [premium upgrade + deploy](docs/superpowers/specs/2026-06-12-premium-upgrade-deploy-design.md)
+- Implementation plans live in `docs/superpowers/plans/` (one per feature; the
+  current ones: premium-upgrade, deploy-free-hosting).
 
 ## The six damage levels (the core domain)
 
@@ -127,7 +134,7 @@ docker compose up        # web :3000 + api :8000
   digit count-up, bars stagger 60ms); everything else 150–200ms fades only.
 - Copy voice: technical inspection register, short ("HOW BADLY IS IT DAMAGED?").
 
-## Supabase setup (one-time, manual — needs dashboard)
+## Supabase setup (DONE 2026-06-12 — keep for re-provisioning)
 
 1. Create project → copy URL + anon key into `web/.env.local`
    (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
@@ -137,7 +144,35 @@ docker compose up        # web :3000 + api :8000
 3. Create **private** bucket `analysis-images`. Files live at
    `{user_id}/{analysis_id}.jpg` and `{user_id}/{analysis_id}_heatmap.png`;
    frontend reads via signed URLs.
-4. Auth → enable Email provider only; **disable email confirmation** (demo).
+4. Auth → enable Email provider only; **disable email confirmation** (demo) —
+   ⚠ the ONE step still pending; until flipped, UI registration dead-ends on
+   email verification (built-in SMTP is rate-limited ~2/hr and rejects test
+   domains).
+
+## Ops notes for Claude sessions (hard-won, no secrets here)
+
+- Supabase SQL access: the direct `db.<ref>.supabase.co` host is IPv6-only and
+  unreachable from this WSL2 box. Use the session pooler
+  `aws-1-eu-north-1.pooler.supabase.com:5432`, user `postgres.<project-ref>`,
+  via `docker run -i --rm -e PGPASSWORD=… postgres:17-alpine psql -h …`
+  (password: ask the user; never commit it).
+- `storage.objects` rows can NOT be SQL-deleted (protect trigger) — use the
+  Storage API. Manually inserted `auth.users` need all token columns set to
+  `''` (NULLs break GoTrue with "Database error querying schema").
+- `NEXT_PUBLIC_*` are baked into the web image at BUILD time → after env
+  changes run `docker compose up -d --build web`.
+- Browser verification: no Playwright in the repo; a working setup lives at
+  `/tmp/e2e` (recreate: `npm i playwright`, then drive snap chromium over CDP —
+  launch `/snap/bin/chromium --headless=new --no-sandbox --remote-debugging-port=9222
+  --user-data-dir=$HOME/.cache/cdp-profile` and `connectOverCDP`). Snap
+  chromium CANNOT write screenshots to `/tmp` — use paths under `$HOME`. Add
+  `--virtual-time-budget=15000` for settled full-page screenshots. Playwright's
+  own bundled chromium is missing system libs (no sudo available).
+- `gh` CLI is not installed; the repo has no git remote yet (will gain one for
+  Vercel/Render deployment).
+- next-intl: array messages are read with `t.raw("key") as string[]`. Tailwind
+  v4 native utilities like `aspect-3/2` / `grayscale-60` work — verify in built
+  CSS when in doubt.
 
 ## Definition of Done (spec §11)
 
