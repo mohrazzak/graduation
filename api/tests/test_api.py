@@ -8,7 +8,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
-from PIL import Image
+from PIL import Image, ImageDraw, ImageStat
 
 from main import app
 from predict.interface import Prediction
@@ -75,6 +75,57 @@ def test_distinct_images_yield_multiple_levels() -> None:
         assert response.status_code == 200
         levels.add(response.json()["level"])
     assert len(levels) >= 2
+
+
+def _textured_quadrant_png(origin: tuple[int, int], background: int) -> bytes:
+    """Flat canvas with a high-contrast checkerboard in one 64px quadrant."""
+    image = Image.new("RGB", (128, 128), (background, background, background))
+    draw = ImageDraw.Draw(image)
+    ox, oy = origin
+    cell = 4
+    for y in range(0, 64, cell):
+        for x in range(0, 64, cell):
+            if (x + y) // cell % 2 == 0:
+                draw.rectangle(
+                    (ox + x, oy + y, ox + x + cell - 1, oy + y + cell - 1),
+                    fill=(10, 10, 10),
+                )
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _alpha_mass_by_quadrant(heatmap_base64: str) -> dict[str, int]:
+    """Sum the heatmap's alpha channel per canvas quadrant."""
+    heatmap = Image.open(io.BytesIO(base64.b64decode(heatmap_base64))).convert("RGBA")
+    alpha = heatmap.split()[3]
+    w, h = alpha.size
+    boxes = {
+        "top-left": (0, 0, w // 2, h // 2),
+        "top-right": (w // 2, 0, w, h // 2),
+        "bottom-left": (0, h // 2, w // 2, h),
+        "bottom-right": (w // 2, h // 2, w, h),
+    }
+    return {name: int(ImageStat.Stat(alpha.crop(box)).sum[0]) for name, box in boxes.items()}
+
+
+@pytest.mark.parametrize(
+    ("corner", "origin"),
+    [("top-left", (0, 0)), ("bottom-right", (64, 64))],
+)
+def test_heatmap_concentrates_on_textured_quadrant(
+    corner: str, origin: tuple[int, int]
+) -> None:
+    """The heatmap must track image content: on a flat photo whose only texture
+    sits in one quadrant, the alpha mass lands there — for every image variant,
+    so a lucky random placement cannot pass."""
+    for background in (235, 240, 245):
+        response = _post_image(_textured_quadrant_png(origin, background))
+        assert response.status_code == 200
+        masses = _alpha_mass_by_quadrant(response.json()["heatmap_base64"])
+        assert max(masses, key=masses.__getitem__) == corner, (
+            f"background={background}: expected mass in {corner}, got {masses}"
+        )
 
 
 def test_rejects_bad_type() -> None:
