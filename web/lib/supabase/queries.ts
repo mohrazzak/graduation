@@ -1,0 +1,230 @@
+// The ONLY data-access layer for analyses + their stored images: storage
+// upload/remove/signed-url and analyses CRUD over the browser Supabase client.
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { getLevel } from "../levels";
+import type { Analysis, Prediction } from "../types";
+import { isSupabaseConfigured } from "./auth";
+import { getSupabaseBrowserClient } from "./client";
+import type { Database } from "./database.types";
+
+export type QueryErrorCode =
+  | "not_configured"
+  | "not_authenticated"
+  | "upload_failed"
+  | "save_failed"
+  | "load_failed"
+  | "delete_failed"
+  | "url_failed";
+
+export type Result<T> =
+  | { data: T; error: null }
+  | { data: null; error: QueryErrorCode };
+
+const BUCKET = "analysis-images";
+// One hour: comfortably outlives any history-browsing session without leaving
+// long-lived URLs to a private bucket floating around.
+const SIGNED_URL_TTL_SECONDS = 3600;
+
+type AnalysesRow = Database["public"]["Tables"]["analyses"]["Row"];
+
+// Uploads the photo (+ optional heatmap) to storage, inserts the analyses row,
+// and returns it as the shared Analysis type. No orphans: any failure removes
+// whatever was already uploaded before reporting the error.
+export async function saveAnalysis(input: {
+  file: Blob;
+  prediction: Prediction;
+}): Promise<Result<Analysis>> {
+  if (!isSupabaseConfigured()) {
+    return { data: null, error: "not_configured" };
+  }
+  const supabase = getSupabaseBrowserClient();
+  // WHY resolve the user here: spec section 3 forbids direct supabase calls
+  // inside JSX components, so callers must not have to look up the user id.
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) {
+    return { data: null, error: "not_authenticated" };
+  }
+
+  const id = crypto.randomUUID();
+  // WHY ".jpg" always: spec section 5 fixes the literal path convention
+  // {user_id}/{analysis_id}.jpg even when the upload was PNG/WebP; the real
+  // MIME type travels as contentType so signed-URL responses render correctly.
+  const imagePath = `${userId}/${id}.jpg`;
+  const uploaded: string[] = [];
+
+  const { error: imageError } = await supabase.storage
+    .from(BUCKET)
+    .upload(imagePath, input.file, { contentType: input.file.type });
+  if (imageError) {
+    return { data: null, error: "upload_failed" };
+  }
+  uploaded.push(imagePath);
+
+  let heatmapPath: string | null = null;
+  if (input.prediction.heatmap_base64) {
+    heatmapPath = `${userId}/${id}_heatmap.png`;
+    try {
+      const heatmapBlob = base64ToBlob(
+        input.prediction.heatmap_base64,
+        "image/png",
+      );
+      const { error: heatmapError } = await supabase.storage
+        .from(BUCKET)
+        .upload(heatmapPath, heatmapBlob, { contentType: "image/png" });
+      if (heatmapError) {
+        throw heatmapError;
+      }
+      uploaded.push(heatmapPath);
+    } catch {
+      // Covers both a malformed base64 payload (atob throws) and an upload
+      // error; either way the already-stored photo must not be orphaned.
+      await removeQuietly(supabase, uploaded);
+      return { data: null, error: "upload_failed" };
+    }
+  }
+
+  const { data: row, error: insertError } = await supabase
+    .from("analyses")
+    .insert({
+      id,
+      user_id: userId,
+      image_path: imagePath,
+      heatmap_path: heatmapPath,
+      level: input.prediction.level,
+      confidence: input.prediction.confidence,
+      probabilities: input.prediction.probabilities,
+    })
+    .select()
+    .single();
+  if (insertError || row === null) {
+    await removeQuietly(supabase, uploaded);
+    return { data: null, error: "save_failed" };
+  }
+
+  // Unreachable in practice (the DB check constraint enforces level 0-5),
+  // but mapping through toAnalysis keeps the narrowing in one place.
+  const analysis = toAnalysis(row);
+  if (analysis === null) {
+    return { data: null, error: "save_failed" };
+  }
+  return { data: analysis, error: null };
+}
+
+// Lists the signed-in user's analyses, newest first. RLS already scopes the
+// select to the owner, so no explicit user_id filter is needed.
+export async function listAnalyses(): Promise<Result<Analysis[]>> {
+  if (!isSupabaseConfigured()) {
+    return { data: null, error: "not_configured" };
+  }
+  const supabase = getSupabaseBrowserClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return { data: null, error: "not_authenticated" };
+  }
+
+  const { data: rows, error } = await supabase
+    .from("analyses")
+    .select()
+    .order("created_at", { ascending: false });
+  if (error || rows === null) {
+    return { data: null, error: "load_failed" };
+  }
+  // WHY filter instead of throw: one row with an impossible level value (e.g.
+  // after a manual DB edit) must not crash the whole history page; dropping
+  // it defensively keeps every valid assessment visible.
+  const analyses = rows
+    .map((row) => toAnalysis(row))
+    .filter((analysis): analysis is Analysis => analysis !== null);
+  return { data: analyses, error: null };
+}
+
+// Removes the stored objects, then deletes the row. Storage-removal errors
+// are non-fatal when the ROW delete succeeds — the row is the source of truth
+// for history, and an orphaned file confined to the user's own folder is
+// acceptable; a failed row delete is not.
+export async function deleteAnalysis(analysis: Analysis): Promise<Result<null>> {
+  if (!isSupabaseConfigured()) {
+    return { data: null, error: "not_configured" };
+  }
+  const supabase = getSupabaseBrowserClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return { data: null, error: "not_authenticated" };
+  }
+
+  const paths = [analysis.image_path];
+  if (analysis.heatmap_path) {
+    paths.push(analysis.heatmap_path);
+  }
+  await removeQuietly(supabase, paths);
+
+  const { error } = await supabase
+    .from("analyses")
+    .delete()
+    .eq("id", analysis.id);
+  if (error) {
+    return { data: null, error: "delete_failed" };
+  }
+  return { data: null, error: null };
+}
+
+// Short-lived signed URL for a private-bucket object (the bucket has no
+// public access, so every render of a stored image goes through here).
+export async function getSignedUrl(path: string): Promise<Result<string>> {
+  if (!isSupabaseConfigured()) {
+    return { data: null, error: "not_configured" };
+  }
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+  if (error || !data) {
+    return { data: null, error: "url_failed" };
+  }
+  return { data: data.signedUrl, error: null };
+}
+
+// Best-effort cleanup. Failures are swallowed on purpose: the caller is
+// already returning the primary error, and a leftover object inside the
+// user's own RLS-scoped folder is harmless next to a second confusing error.
+async function removeQuietly(
+  supabase: SupabaseClient<Database>,
+  paths: string[],
+): Promise<void> {
+  try {
+    await supabase.storage.from(BUCKET).remove(paths);
+  } catch {
+    // Intentionally ignored — see header comment.
+  }
+}
+
+// Validates a DB row into the shared Analysis type, or null when the level is
+// outside 0-5 (rows are validated rather than trusted, same as API responses).
+function toAnalysis(row: AnalysesRow): Analysis | null {
+  try {
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      image_path: row.image_path,
+      heatmap_path: row.heatmap_path,
+      level: getLevel(row.level).id,
+      confidence: row.confidence,
+      probabilities: row.probabilities,
+      created_at: row.created_at,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// The mock API ships the heatmap as raw base64 (no data: prefix); storage
+// wants bytes, so decode via atob into a typed PNG blob.
+function base64ToBlob(base64: string, type: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type });
+}
