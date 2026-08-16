@@ -275,5 +275,76 @@
     "weights_missing": "Weights not installed",
     "dependency_missing": "Dependency missing",
     "load_failed": "Failed to load"
+  },
+  "services": {
+    "title": "Next steps",
+    "ok": "OK"
+  },
+  "repair": {
+    "title": "2D restoration",
+    "intro": "Rebuild the damaged facade into a plausible restored view of the same building.",
+    "run": "Run restoration",
+    "runAnyway": "Run reconstruction anyway",
+    "rerun": "Run again",
+    "notNeeded": "No restoration needed — the structure is standing. Reconstruct it in 3D instead.",
+    "gcWarning": "At total collapse there is little left to restore. The result is a conceptual reconstruction of what the building may have been — not a repair plan.",
+    "beforeAfter": "Before / after",
+    "repairedAlt": "The same building, restored",
+    "editPrompt": "Edit instruction",
+    "promptLabel": "Restoration instruction",
+    "promptPlaceholder": "Leave blank to use the instruction tuned to this damage class.",
+    "promptHint": "The text below is sent to the image model verbatim. Editing it and running again is a real re-run.",
+    "stages": {
+      "isolating": "Isolating the building",
+      "edges": "Mapping structural edges",
+      "generating": "Generating the restored view",
+      "composing": "Composing the change overlay"
+    },
+    "canvas": {
+      "source": "Source",
+      "mask": "Building mask",
+      "edges": "Edge map",
+      "pending": "pending"
+    },
+    "errors": {
+      "quota_exceeded": "The restoration service is out of free credit for today. The building mask and edge map above are real and were produced locally — only the generated image needs the quota.",
+      "no_api_key": "No restoration API key is configured on the server. The mask and edge map above still ran locally.",
+      "backend_error": "The restoration service did not respond. Try again in a moment.",
+      "no_image_returned": "The model returned no image for this photo. Try editing the instruction, or use a different photo.",
+      "timed_out": "Restoration took too long and was stopped.",
+      "server": "Restoration failed. Try again.",
+      "aborted": "Restoration was cancelled.",
+      "job_expired": "That restoration expired. Run it again."
+    }
+  },
+  "model3d": {
+    "title": "3D reconstruction",
+    "intro": "Turn the photo into a textured 3D model you can orbit, inspect, and download.",
+    "runOriginal": "Reconstruct from photo",
+    "runRepaired": "Reconstruct from restored",
+    "source": {
+      "original": "Source: the original photo",
+      "repaired": "Source: the restored image"
+    },
+    "viewerAlt": "Interactive 3D model of the building. Drag to orbit, scroll to zoom.",
+    "loading": "Loading the viewer...",
+    "download": "Download GLB",
+    "stages": {
+      "uploading": "Uploading the image",
+      "reconstructing": "Reconstructing geometry and textures",
+      "downloading": "Downloading the model"
+    },
+    "errors": {
+      "no_api_key": "No 3D reconstruction API key is configured on the server. Add TRIPO_API_KEY and restart the API.",
+      "quota_exceeded": "The 3D service is out of free credit. Reconstruction needs paid credit to continue.",
+      "generation_failed": "The service could not reconstruct this photo. A clearer, front-on shot of one building works best.",
+      "upload_failed": "The image could not be uploaded to the 3D service.",
+      "task_failed": "The 3D service rejected the request.",
+      "timed_out": "Reconstruction took too long and was stopped.",
+      "backend_error": "The 3D service did not respond. Try again in a moment.",
+      "server": "Reconstruction failed. Try again.",
+      "aborted": "Reconstruction was cancelled.",
+      "job_expired": "That reconstruction expired. Run it again."
+    }
   }
 }

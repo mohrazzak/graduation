@@ -16,6 +16,7 @@ import { ImageWithHeatmap } from "./ImageWithHeatmap";
 import { ModelPicker } from "./ModelPicker";
 import { RecommendationCard } from "./RecommendationCard";
 import { ResultPanel } from "./ResultPanel";
+import { ServiceRail } from "./ServiceRail";
 import { SampleStrip } from "./SampleStrip";
 import { SaveFailedNote } from "./SaveFailedNote";
 import { ScanOverlay } from "./ScanOverlay";
@@ -165,6 +166,10 @@ export function AnalyzeClient() {
         {/* What to DO about the verdict — the reason a tier matters to a user. */}
         {phase === "done" && prediction !== null ? (
           <RecommendationCard tier={prediction.tier} />
+        ) : null}
+        {/* What to do next with this building — gated by the tier. */}
+        {phase === "done" && prediction !== null && file !== null ? (
+          <ServiceRail file={file} tier={prediction.tier} sourceSrc={previewUrl} />
         ) : null}
         {phase === "done" && saveError !== null ? (
           <SaveFailedNote
