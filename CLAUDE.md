@@ -160,7 +160,7 @@ alphabetical-index bug unwriteable.
   props interface. Server Components by default; `"use client"` only when needed.
 - Supabase only via `lib/supabase/`; FastAPI only via `lib/api.ts` — never
   inside JSX components.
-- No magic values — damage levels/colors/labels come from `lib/levels.ts`.
+- No magic values — tier codes/colors/labels come from `lib/tiers.ts`.
 - **Tailwind logical properties only**: `ms- me- ps- pe- text-start text-end
   start- end-`. NEVER `ml- mr- pl- pr- left- right-` (RTL must mirror free).
 - Zero hardcoded UI strings in JSX — everything via `messages/*.json`
@@ -179,8 +179,8 @@ alphabetical-index bug unwriteable.
   `line #2A2A2F`, `text #EDEDEF`, `muted #8B8B93`, `hazard #FFB000` (accent,
   CTAs, focus rings), `alert #FF3B30` (levels 4–5 ONLY).
 - Fonts: Archivo (display, uppercase), Inter (body), JetBrains Mono (ALL
-  numbers/percentages/timestamps/level digits), Cairo (ar).
-- Signature motif: **THE SCALE** — 6-segment strip (`components/ui/ScaleStrip`)
+  numbers/percentages/timestamps/tier codes), Cairo (ar).
+- Signature motif: **THE SCALE** — 3-segment strip (`components/ui/TierStrip`)
   reused in navbar logo, landing hero (animated), analyze result, history cards.
 - Restraint: border radius ≤ 4px, hairline `line` borders, corner tick marks on
   key cards, film-grain ~3% overlay, ONE hazard-stripe (45°, 8px) used only on
