@@ -1,5 +1,5 @@
-"""FastAPI entrypoint: CORS plus the two frozen contract routes from spec
-section 6 — GET /health and POST /predict."""
+"""FastAPI entrypoint: CORS plus the tier-based contract routes from the
+restore-pipeline spec section 4 — GET /health, GET /models, POST /predict."""
 
 import io
 import os
@@ -10,8 +10,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from PIL import Image
 
-from predict.interface import get_predictor, is_mock_mode
-from schemas import HealthResponse, PredictionResponse
+from predict.registry import (
+    ModelUnavailableError,
+    UnknownModelError,
+    default_model_id,
+    get_classifier,
+    list_models,
+)
+from schemas import (
+    HealthResponse,
+    ModelInfoResponse,
+    ModelsResponse,
+    PredictionResponse,
+)
 
 _ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -59,11 +70,34 @@ def create_app() -> FastAPI:
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
-        """Liveness probe that also reports whether the mock predictor is active."""
-        return HealthResponse(status="ok", mock=is_mock_mode())
+        """Liveness probe that also reports which classifier is active."""
+        active = default_model_id()
+        return HealthResponse(status="ok", mock=active == "mock", model=active)
+
+    @app.get("/models", response_model=ModelsResponse)
+    def models() -> ModelsResponse:
+        """List the enabled classifier backends and whether each can run now.
+
+        Unavailable backends are reported with a reason rather than omitted: a
+        disabled entry is information, a missing one is a mystery.
+        """
+        return ModelsResponse(
+            models=[
+                ModelInfoResponse(
+                    id=info.id,
+                    name=info.name,
+                    accuracy=info.accuracy,
+                    available=info.available,
+                    reason=info.reason,
+                )
+                for info in list_models()
+            ]
+        )
 
     @app.post("/predict", response_model=PredictionResponse)
-    async def predict(request: Request, file: UploadFile) -> PredictionResponse:
+    async def predict(
+        request: Request, file: UploadFile, model: str | None = None
+    ) -> PredictionResponse:
         """Classify an uploaded building photo (jpeg/png/webp, max 10 MB)."""
         if file.content_type not in _ALLOWED_CONTENT_TYPES:
             raise HTTPException(
@@ -90,11 +124,32 @@ def create_app() -> FastAPI:
                 status_code=400,
                 detail="The file is not a valid image. Upload a real JPEG, PNG, or WebP photo.",
             ) from exc
-        prediction = get_predictor()(data)
+        try:
+            classifier = get_classifier(model)
+        except UnknownModelError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown model {model!r}. Call GET /models for the roster.",
+            ) from exc
+        except ModelUnavailableError as exc:
+            # 503, not 500: the request was valid, the server just cannot serve
+            # that model right now (missing weights or dependency).
+            raise HTTPException(
+                status_code=503,
+                detail="That model is not available on this server right now.",
+            ) from exc
+
+        prediction = classifier.classify(data)
         return PredictionResponse(
-            level=prediction.level,
+            tier=prediction.tier,
             confidence=prediction.confidence,
             probabilities=prediction.probabilities,
+            damage_percent=prediction.damage_percent,
+            model=ModelInfoResponse(
+                id=classifier.id,
+                name=classifier.name,
+                accuracy=classifier.accuracy,
+            ),
             heatmap_base64=prediction.heatmap_base64,
         )
 
