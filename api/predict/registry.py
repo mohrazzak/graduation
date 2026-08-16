@@ -1,12 +1,21 @@
 """The classifier roster: which backends exist, which load, which are shown.
 
-⚠ IMPORT ORDER IS LOAD-BEARING. torch is imported at module load, BEFORE any
-TensorFlow import can happen. Importing torch *after* TensorFlow segfaults the
-process (verified 2026-08-17 on this machine: exit 139, core dumped). Because
-this registry offers a Keras backend and an Ultralytics backend in the same
-FastAPI process, and a user can switch between them at runtime, getting this
-wrong takes down the whole API the first time someone switches models mid-demo
-— not just the one request.
+⚠ IMPORT ORDER IS LOAD-BEARING — read before touching the imports below.
+
+This registry offers a Keras (TensorFlow) backend and an Ultralytics (PyTorch)
+backend in ONE FastAPI process, and a user can switch between them at runtime.
+Those two stacks only coexist in one import order. Measured on this machine
+(2026-08-17):
+
+    import ultralytics AFTER a Keras prediction  -> SIGSEGV, exit 139
+    import ultralytics BEFORE TensorFlow is used -> both work, in any order,
+                                                    including switching back
+
+Importing ``torch`` early is NOT sufficient: the crash is triggered by importing
+``ultralytics`` itself. So the whole torch stack is imported here, at module
+load, before any backend can pull in TensorFlow. Get this wrong and the API does
+not fail one request — it dies, mid-demo, the first time someone picks the
+second model.
 """
 
 from __future__ import annotations
@@ -16,10 +25,12 @@ import logging
 import os
 from dataclasses import dataclass
 
-# torch is optional (the Keras and mock backends run without it), but when it is
-# present it MUST be imported here, before anything can reach TensorFlow.
+# The torch stack is optional (the Keras and mock backends run without it), but
+# when present it MUST be imported here, before anything can reach TensorFlow.
+# Importing ultralytics — not merely torch — is what makes the two safe together.
 with contextlib.suppress(ImportError):
-    import torch  # noqa: F401  # MUST precede TensorFlow; see module docstring
+    import torch  # noqa: F401  # see module docstring
+    import ultralytics  # noqa: F401  # MUST precede any TensorFlow use
 
 from predict.interface import Classifier
 

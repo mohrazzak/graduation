@@ -1,16 +1,22 @@
-// Empty 3x3 confusion-matrix outline: a labeled slot real counts drop into once
-// per-class evaluation is exported. Diagonal cells are tinted with each tier's
-// ramp color at low opacity.
+// The measured 3x3 confusion matrix. Cell shading is scaled to each row's
+// support so the diagonal reads as strength, not as raw class imbalance.
 import { Fragment } from "react";
 import { useTranslations } from "next-intl";
+import { PRIMARY_EVALUATION } from "@/lib/evaluation";
 import { DAMAGE_TIERS } from "@/lib/tiers";
 
-// ~15% alpha hex suffix — visibly a placeholder tint, never a real value.
-const DIAGONAL_TINT_ALPHA = "26";
+// Alpha ceiling for a fully-correct row, as a two-digit hex suffix.
+const MAX_ALPHA = 0.75;
+
+function alphaSuffix(fraction: number): string {
+  const alpha = Math.round(fraction * MAX_ALPHA * 255);
+  return alpha.toString(16).padStart(2, "0");
+}
 
 export function ConfusionMatrixSlot() {
   const t = useTranslations("howItWorks.metrics");
   const captionId = "confusion-matrix-caption";
+  const { confusion, perTier, name } = PRIMARY_EVALUATION;
 
   return (
     <figure className="mx-auto max-w-md">
@@ -34,23 +40,27 @@ export function ConfusionMatrixSlot() {
               <span className="self-center justify-self-center font-mono text-[10px] text-muted">
                 {row.code}
               </span>
-              {DAMAGE_TIERS.map((col) => (
-                <span
-                  key={col.code}
-                  className="aspect-square border border-line"
-                  style={
-                    row.code === col.code
-                      ? { backgroundColor: `${row.color}${DIAGONAL_TINT_ALPHA}` }
-                      : undefined
-                  }
-                />
-              ))}
+              {DAMAGE_TIERS.map((col) => {
+                const count = confusion[row.code][col.code];
+                const support = perTier[row.code].support;
+                return (
+                  <span
+                    key={col.code}
+                    className="flex aspect-square items-center justify-center border border-line font-mono text-sm"
+                    style={{
+                      backgroundColor: `${row.color}${alphaSuffix(count / support)}`,
+                    }}
+                  >
+                    {count}
+                  </span>
+                );
+              })}
             </Fragment>
           ))}
         </div>
       </div>
       <figcaption id={captionId} className="mt-3 text-xs text-muted">
-        {t("confusionCaption")}
+        {t("confusionCaption", { model: name })}
       </figcaption>
     </figure>
   );

@@ -199,19 +199,19 @@
     },
     "metrics": {
       "title": "Evaluation metrics",
-      "placeholderTag": "Per-class breakdown pending",
-      "intro": "Headline accuracy is measured; the per-class breakdown below is not filled in yet and is shown as pending rather than estimated.",
+      "intro": "Measured on the PHI-Net validation split — 146 images the models never saw during training.",
       "accuracyLabel": "Overall accuracy",
-      "pendingValue": "—",
       "confusionTitle": "Confusion matrix",
-      "confusionCaption": "Empty 3×3 confusion-matrix slot. Rows are actual classes, columns are predicted classes; the diagonal cells carry each class's color at low opacity. Counts will be filled in once a per-class evaluation is exported.",
+      "confusionCaption": "Measured 3×3 confusion matrix for {model}. Rows are actual classes, columns are predicted; cell shading is scaled to each row's support, so a strong diagonal reads as accuracy rather than class imbalance.",
       "axisActual": "Actual",
       "axisPredicted": "Predicted",
-      "perLevelTitle": "Per-class precision and recall",
+      "perLevelTitle": "Per-class precision and recall — {model}",
       "levelHeader": "Class",
       "precision": "Precision",
       "recall": "Recall",
-      "accuracyNote": "Validation top-1 accuracy on the same three-class split, so the figures are directly comparable."
+      "accuracyNote": "Validation top-1 accuracy on the same three-class split, so the figures are directly comparable.",
+      "support": "n={count}",
+      "perLevelNote": "Partial collapse is the hardest class for both models: it sits between the other two and is most often confused with them. Non-collapse is under-recalled because the class includes minor damage, which the models frequently read as partial collapse."
     },
     "gradcam": {
       "title": "What is the heatmap?",

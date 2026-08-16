@@ -3,10 +3,9 @@
 // pending until a per-class evaluation is exported — no fabricated numbers.
 import { useFormatter, useTranslations } from "next-intl";
 import { Card } from "@/components/ui/Card";
-import { MODEL_EVALUATIONS } from "@/lib/evaluation";
+import { MODEL_EVALUATIONS, PRIMARY_EVALUATION } from "@/lib/evaluation";
 import { DAMAGE_TIERS } from "@/lib/tiers";
 import { ConfusionMatrixSlot } from "./ConfusionMatrixSlot";
-import { PlaceholderTag } from "./PlaceholderTag";
 
 export function MetricsSection() {
   const t = useTranslations();
@@ -48,10 +47,9 @@ export function MetricsSection() {
         </Card>
       </div>
 
-      <div className="mt-10 flex flex-wrap items-center gap-3">
-        <h3 className="font-display text-base font-bold uppercase">{tm("perLevelTitle")}</h3>
-        <PlaceholderTag label={tm("placeholderTag")} />
-      </div>
+      <h3 className="mt-10 font-display text-base font-bold uppercase">
+        {tm("perLevelTitle", { model: PRIMARY_EVALUATION.name })}
+      </h3>
       <div className="mt-4">
         <div className="grid grid-cols-[1fr_5rem_5rem] gap-4 pb-2 font-mono text-[10px] uppercase tracking-wider text-muted">
           <span>{tm("levelHeader")}</span>
@@ -59,25 +57,42 @@ export function MetricsSection() {
           <span className="text-end">{tm("recall")}</span>
         </div>
         <ul className="divide-y divide-line border-y border-line">
-          {DAMAGE_TIERS.map((tier) => (
-            <li
-              key={tier.code}
-              className="grid grid-cols-[1fr_5rem_5rem] items-center gap-4 py-3"
-            >
-              <span className="flex items-center gap-3">
-                <span
-                  aria-hidden="true"
-                  className="block h-2.5 w-6"
-                  style={{ backgroundColor: tier.color }}
-                />
-                <span className="font-mono text-xs text-muted">{tier.code}</span>
-                <span className="text-sm">{t(`tiers.${tier.key}.name`)}</span>
-              </span>
-              <span className="text-end font-mono text-sm text-muted">{tm("pendingValue")}</span>
-              <span className="text-end font-mono text-sm text-muted">{tm("pendingValue")}</span>
-            </li>
-          ))}
+          {DAMAGE_TIERS.map((tier) => {
+            const metrics = PRIMARY_EVALUATION.perTier[tier.code];
+            return (
+              <li
+                key={tier.code}
+                className="grid grid-cols-[1fr_5rem_5rem] items-center gap-4 py-3"
+              >
+                <span className="flex items-center gap-3">
+                  <span
+                    aria-hidden="true"
+                    className="block h-2.5 w-6"
+                    style={{ backgroundColor: tier.color }}
+                  />
+                  <span className="font-mono text-xs text-muted">{tier.code}</span>
+                  <span className="text-sm">{t(`tiers.${tier.key}.name`)}</span>
+                  <span className="font-mono text-xs text-muted">
+                    {tm("support", { count: metrics.support })}
+                  </span>
+                </span>
+                <span className="text-end font-mono text-sm">
+                  {format.number(metrics.precision, {
+                    style: "percent",
+                    maximumFractionDigits: 1,
+                  })}
+                </span>
+                <span className="text-end font-mono text-sm">
+                  {format.number(metrics.recall, {
+                    style: "percent",
+                    maximumFractionDigits: 1,
+                  })}
+                </span>
+              </li>
+            );
+          })}
         </ul>
+        <p className="mt-3 max-w-2xl text-xs text-muted">{tm("perLevelNote")}</p>
       </div>
     </section>
   );
