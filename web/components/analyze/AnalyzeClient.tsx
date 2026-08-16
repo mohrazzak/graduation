@@ -14,6 +14,7 @@ import { DropZone } from "./DropZone";
 import { HeatmapToggle } from "./HeatmapToggle";
 import { ImageWithHeatmap } from "./ImageWithHeatmap";
 import { ModelPicker } from "./ModelPicker";
+import { RecommendationCard } from "./RecommendationCard";
 import { ResultPanel } from "./ResultPanel";
 import { SampleStrip } from "./SampleStrip";
 import { SaveFailedNote } from "./SaveFailedNote";
@@ -160,6 +161,10 @@ export function AnalyzeClient() {
               {t("common.actions.analyzeAnother")}
             </Button>
           </ResultPanel>
+        ) : null}
+        {/* What to DO about the verdict — the reason a tier matters to a user. */}
+        {phase === "done" && prediction !== null ? (
+          <RecommendationCard tier={prediction.tier} />
         ) : null}
         {phase === "done" && saveError !== null ? (
           <SaveFailedNote
