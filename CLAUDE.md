@@ -18,6 +18,13 @@ and the tier-gated service rail with the mask/edges canvas and `<model-viewer>`.
 Supabase is re-provisioned (the old project was deleted) and the full
 register→analyze→save→history flow is browser-verified in both locales.
 
+**TensorFlow is installed; the ResNet runs for real.** Verified through the API:
+sample-NC → NC 96.5%, sample-PC → PC 71.9%, sample-GC → GC 98.8%. `ultralytics`
+is NOT installed — its opencv dependency (61–74 MB) will not finish downloading
+on this connection, so `yolo-cls` reports `dependency_missing` and the picker
+shows it disabled. Everything else about YOLO is done (retrained weights, the
+backend, its tests).
+
 ⚠ **Both generation services are out of credit.** Gemini image editing returns
 429 (free-tier image quota spent) and the Tripo account balance is 0. Both keys
 are VALID — the failures are funding, not configuration, and the UI says so.
