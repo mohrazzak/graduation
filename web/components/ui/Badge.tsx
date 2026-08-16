@@ -1,7 +1,7 @@
 // Mono-font chip tinted by a caller-supplied ramp color (border/text + faint bg).
 export interface BadgeProps {
   label: string;
-  /** 6-digit hex (from DAMAGE_LEVELS) — alpha suffixes derive the border/bg tints. */
+  /** 6-digit hex (from DAMAGE_TIERS) — alpha suffixes derive the border/bg tints. */
   color: string;
   className?: string;
 }

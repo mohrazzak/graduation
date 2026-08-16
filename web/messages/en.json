@@ -214,9 +214,9 @@
       "perLevelNote": "Partial collapse is the hardest class for both models: it sits between the other two and is most often confused with them. Non-collapse is under-recalled because the class includes minor damage, which the models frequently read as partial collapse."
     },
     "gradcam": {
-      "title": "What is the heatmap?",
-      "body": "The heatmap is generated with Grad-CAM, a technique that traces the model's prediction back to the image regions that influenced it most. Warm zones mark where the model looked when grading the damage — cracked walls, failed columns, collapsed sections — so you can verify the verdict rests on structural evidence, not on the background.",
-      "tryNote": "On the <link>analyze page</link>, use the heatmap toggle to overlay it on any result."
+      "title": "Explainability: where the model looked",
+      "body": "A Grad-CAM heatmap highlights the pixels that most influenced a verdict, turning a bare class label into something an engineer can check. It is not implemented yet: the trained classifiers currently return no heatmap, so the analyze page shows none rather than displaying an explanation no model produced.",
+      "tryNote": "It is a planned addition on the ResNet backend. Until it lands, the <link>analyze page</link> reports the class probabilities alone."
     }
   },
   "auth": {

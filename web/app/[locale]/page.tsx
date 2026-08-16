@@ -1,4 +1,4 @@
-// Landing: hero with the animated SCALE, the three-step process, and the six levels.
+// Landing: hero with the animated SCALE, the three-step process, and the three tiers.
 import { setRequestLocale } from "next-intl/server";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorksSection } from "@/components/landing/HowItWorksSection";

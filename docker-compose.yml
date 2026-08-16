@@ -19,9 +19,16 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Runtime-switchable: flip to false once the trained model lands in
-      # api/predict/model.py — no image rebuild of web required.
-      MOCK_MODE: ${MOCK_MODE:-true}
+      # WHY mock by default: the real classifiers need ~3 GB of TensorFlow /
+      # torch wheels that are deliberately NOT in the api image, plus weight
+      # files that live outside the repo. Listing them here instead would render
+      # three permanently-disabled entries in the model picker. To run the real
+      # models, install api/requirements-models.txt, mount the weights, and set
+      # ENABLED_MODELS + the *_WEIGHTS_PATH vars below.
+      ENABLED_MODELS: ${ENABLED_MODELS:-mock}
+      RESNET_WEIGHTS_PATH: ${RESNET_WEIGHTS_PATH:-}
+      YOLO_WEIGHTS_PATH: ${YOLO_WEIGHTS_PATH:-}
+      RAED_WEIGHTS_PATH: ${RAED_WEIGHTS_PATH:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
 
   web:
