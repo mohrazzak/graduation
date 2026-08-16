@@ -35,6 +35,14 @@ Nothing here is invented; it all exists on disk today.
 | 2D repair | `api/repair/generate.py` (this repo) | Gemini 2.5 Flash Image, instruction editing |
 | Change overlay | `api/repair/diff.py` (this repo) | Before/after diff, reused as-is |
 
+**`api/repair/` is currently untracked.** Of its eight modules, three survive:
+`generate.py` and `diff.py` are load-bearing above, and `generate_hf.py` stays as
+a documented alternative backend. `assess_clip.py` and `assess.py` are superseded
+by the real classifier, and `cost.py`, `batch.py`, `pipeline.py` belong to the
+parked cost feature (§15). The surviving modules are committed as part of the
+repair work; the rest stay untracked or are deleted, and the implementation plan
+must say which.
+
 `A-Smart-Site-...` is `/mnt/c/Users/mohrazzak/Desktop/A-Smart-Site-For-Rehabilitating-Damaged-Buildings-main`.
 
 **A-Smart-Site contains no damage classifier.** Its RT-DETR and Fast R-CNN are
@@ -227,6 +235,31 @@ Output shape `(1, 3)`, softmax, **alphabetical** — see §3.1.
 A unit test asserts a known sample image yields the expected tier, so a
 preprocessing regression fails the suite instead of the defense.
 
+### 5.2 The mock backend is rewritten, not retired
+
+`predict/mock.py` currently emits the six-level contract. It is rewritten to emit
+the three-tier one, staying deterministic and hash-seeded (same image → same
+tier). It remains the default when no weights are present, so the cloud
+deployment and CI keep working with zero heavy dependencies.
+
+### 5.3 Heatmaps: null in v1, Grad-CAM as a stretch
+
+The master spec promised "real model + Grad-CAM", the how-it-works page has a
+`GradCamSection`, and the mock has always returned a heatmap — so **the null
+path may never have been exercised** in `ImageWithHeatmap`, `HeatmapToggle`, the
+reveal slider, or the history modal.
+
+The decision: **real backends return `heatmap_base64: null` in v1.** Day 1
+verifies that every heatmap affordance hides cleanly when it is null, rather than
+rendering an empty layer or a dead toggle. `heatmap_path` stays nullable in the
+schema.
+
+Grad-CAM on the Keras ResNet is a **day-7 stretch**, not a commitment: it is
+roughly thirty lines of `tf.GradientTape` against the last conv block plus the
+existing overlay code, and adds no dependency. If it lands, it fills the
+`GradCamSection` placeholder with something real; if it does not, that section
+says so honestly.
+
 ## 6. Repair pipeline (2D)
 
 `POST /jobs/repair` runs real stages and emits real artifacts:
@@ -281,6 +314,10 @@ Artifact: `model` (GLB, `model/gltf-binary`).
 
 Requires `TRIPO_API_KEY`. When unset, the endpoint returns 503 with a clear
 message rather than failing mid-job.
+
+Raed's script derives the upload `type` from the input filename. On the
+`from_job` path the input is a Gemini-produced PNG with no filename, so the type
+is set explicitly rather than inferred.
 
 **Depth Anything V2 + Open3D (`images_to_3d.py`) is not an alternative.** It
 emits a PLY point cloud and opens a desktop window — it is neither a textured
@@ -349,9 +386,32 @@ lib/
 Before/after comparison **reuses the existing `HeatmapRevealLayer`** — it is
 already a keyboard-operable, direction-aware wipe slider. No new component.
 
+### 9.1 Six-level residue audit
+
+The scale change reaches further than the components above. Every one of these is
+checked and updated in the same pass:
+
+- **how-it-works page** — `DatasetSection`, `ModelSection`, `MetricsSection`, and
+  `ConfusionMatrixSlot` describe a six-level model. These stop being placeholders:
+  the dataset is PHI-Net (PEER, UC Berkeley), Task 5 Collapse Mode; the
+  architecture is ResNet50 transfer learning; accuracy is 74.66% (80.37% for
+  YOLO). The confusion matrix becomes 3×3.
+- **`ReportSheet`** (PDF print stylesheet) — renders level, probabilities, and the
+  scale strip.
+- **Landing copy** — any "six damage levels" phrasing in `messages/{en,ar}.json`.
+- **`SampleStrip`** — the six `level-*.jpg` samples are already deleted from
+  `web/public/samples/`. Replaced by **three, one per tier**, so the strip
+  demonstrates the actual scale.
+- **Footer / citations** — dataset and model attribution now have real values.
+
 ## 10. Storage
 
 ```sql
+-- Order matters: the NOT NULL columns below cannot be added to a non-empty
+-- table, so the wipe comes FIRST. Storage objects must be cleared via the
+-- Storage API, not SQL (a protect trigger blocks deleting storage.objects rows).
+delete from public.analyses;
+
 -- analyses: drop the 0-5 scale, adopt tiers
 alter table public.analyses drop column level;
 alter table public.analyses add column tier text not null
@@ -427,6 +487,8 @@ Ordered so that stopping at the end of any day still leaves a working demo.
 - [ ] Repair job shows real mask and Canny artifacts; prompt edit re-runs
 - [ ] 3D model orbits, zooms, and downloads as GLB
 - [ ] Keyboard-only path through classify → restore → 3D; reduced motion honored
+- [ ] Every heatmap affordance hides cleanly when `heatmap_base64` is null
+- [ ] No six-level residue: how-it-works, ReportSheet, landing copy, samples
 - [ ] Fixtures let the full demo run with both API keys removed
 - [ ] `docker compose up` still starts the app
 - [ ] `CLAUDE.md` records the new contract, the 3 tiers, and the index trap
