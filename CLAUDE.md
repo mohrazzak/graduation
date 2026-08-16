@@ -9,15 +9,24 @@ to the user's personal history.
 a deterministic mock remains for environments without the weights. The real
 backends live in `api/predict/backends/`.
 
-**Build status (2026-08-17):** the six-level scale has been replaced by the
-three PHI-Net collapse tiers on branch `feat/three-tier-pipeline`. Shipped:
-tier domain module, classifier registry (`resnet50-phinet`, `yolo-cls`, `raed`,
-`mock`) with `ENABLED_MODELS`, tier-based `/predict` + `/models`, the whole web
-migration, real evaluation metrics on how-it-works, and verified per-tier demo
-samples. In flight: applying the DB migration (needs the Supabase password),
-then phases 2-4 — job API, Gemini 2D repair, Tripo 3D + model-viewer.
+**Build status (2026-08-17):** on branch `feat/three-tier-pipeline`.
+Shipped: three PHI-Net collapse tiers end to end, classifier registry
+(`resnet50-phinet`, `yolo-cls`, `raed`, `mock`) with `ENABLED_MODELS`,
+tier-keyed `/predict` + `/models`, real evaluation metrics on how-it-works,
+the polled job API, the 2D restoration pipeline, 3D reconstruction via Tripo,
+and the tier-gated service rail with the mask/edges canvas and `<model-viewer>`.
+Supabase is re-provisioned (the old project was deleted) and the full
+register→analyze→save→history flow is browser-verified in both locales.
+
+⚠ **Both generation services are out of credit.** Gemini image editing returns
+429 (free-tier image quota spent) and the Tripo account balance is 0. Both keys
+are VALID — the failures are funding, not configuration, and the UI says so.
+The restoration pipeline still produces its real local artifacts (building mask,
+edge map) with no quota at all, so the canvas works regardless.
+
 Still pending on the user: disable "Confirm email" in the Supabase dashboard
-and fill the footer university/supervisor placeholder names.
+(registration is blocked by the ~2/hour built-in SMTP limit until then), fund or
+wait out the two API quotas, and fill the footer university/supervisor names.
 
 Authoritative documents — read before changing anything:
 
@@ -104,6 +113,10 @@ api/                    FastAPI app (main.py, schemas.py, tests/)
   predict/registry.py   backend roster, ENABLED_MODELS  (⚠ torch import order)
   predict/backends/     resnet.py, yolo.py, raed.py, mock_backend.py
   requirements-models.txt  optional heavy deps (TensorFlow, torch, ultralytics)
+  jobs/store.py         in-process job registry (single process, 30 min TTL)
+  jobs/stages.py        LOCAL free stages: building mask, edge map
+  jobs/repair.py        2D restoration pipeline (Gemini for the generate step)
+  jobs/model3d.py       3D reconstruction via Tripo -> GLB
 supabase/schema.sql     run in Supabase dashboard (table + RLS + storage policies)
 ```
 
@@ -148,6 +161,21 @@ docker compose up        # web :3000 + api :8000
   the mock matches them rather than faking an explanation no model produced.
 - Mock is deterministic: same image bytes → same result (hash-seeded RNG).
 - CORS allows `http://localhost:3000` (+ university server origin via `CORS_ORIGINS`).
+
+### Job routes (restoration + 3D)
+
+- `POST /jobs/repair` — multipart `file`, `tier` (REQUIRED — restoration is
+  gated on classification in the API, not just the UI), optional `prompt`.
+- `POST /jobs/model3d` — multipart `file`, OR `from_job=<repair job id>` to
+  reconstruct from the restored image instead of the original.
+- `GET /jobs/{id}` → `{status, stage: {key,index,total}|null, artifacts[], detail}`.
+  Stages are reported as the pipeline genuinely reaches them.
+- `GET /jobs/{id}/artifact/{name}` → raw bytes.
+  Repair artifacts: `mask`, `edges`, `repaired`, `diff`. 3D: `model` (GLB).
+- **`mask` and `edges` are produced LOCALLY and need no API quota** — they
+  survive a dead quota, which is why the canvas still works when generation
+  fails. `detail` on failure is a message KEY (`quota_exceeded`, `no_api_key`,
+  …), translated in the frontend.
 
 This REPLACED the old frozen contract (`level` 0-5 + six-float array) —
 a deliberate break, signed off, because code-keyed probabilities make the
