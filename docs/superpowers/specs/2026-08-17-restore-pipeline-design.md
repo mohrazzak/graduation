@@ -214,8 +214,8 @@ class Classifier(Protocol):
 
 | id | Backend | Accuracy | Status |
 |----|---------|----------|--------|
-| `resnet50-phinet` | Keras ResNet50, `best_model.keras` | 74.66% | ready |
-| `yolo-cls` | Ultralytics YOLOv8-cls, `yolo_cls.pt` | 80.37% | ready |
+| `resnet50-phinet` | Keras ResNet50, `best_model.keras` | 74.66% | **verified working** (§5.5) |
+| `yolo-cls` | Ultralytics YOLO11-cls | TBD | **must be retrained** (§5.6) |
 | `raed` | Raed's classifier | TBD | **stub until weights arrive** |
 | `mock` | Deterministic hash-seeded | — | always available, hidden by default |
 
@@ -296,6 +296,58 @@ roughly thirty lines of `tf.GradientTape` against the last conv block plus the
 existing overlay code, and adds no dependency. If it lands, it fills the
 `GradCamSection` placeholder with something real; if it does not, that section
 says so honestly.
+
+### 5.5 Verified on this machine (2026-08-17)
+
+Measured, not assumed:
+
+| Fact | Value |
+|------|-------|
+| Python / TensorFlow / torch | 3.12.3 / 2.21.0 / 2.12.0+cu130 |
+| GPU | GTX 1650 Ti, 4 GB VRAM, `cuda_available: true` |
+| `best_model.keras` | loads, input `(None,224,224,3)`, output `(None,3)` |
+| Prediction on `demo/damaged/partial.jpg` | GC 0.221 / NC 0.178 / **PC 0.600** |
+
+The ResNet **classifies the partial-damage sample as PC**, which confirms both
+the model and the §5.2 Caffe preprocessing end to end. That exact assertion
+becomes the unit test.
+
+The working venv is `/home/mohrazzak/projects/graduation/.venv`. The API's own
+venv has neither framework; the heavy requirements are installed there (§5).
+
+#### ⚠ Import order is load-bearing: torch before TensorFlow
+
+Importing torch **after** TensorFlow **segfaults the process** (verified: exit
+139, core dumped). Importing torch **first** lets both coexist cleanly.
+
+Since the registry offers a Keras backend and an Ultralytics backend in one
+FastAPI process, and a user can switch between them at runtime, the registry
+module **imports torch at module load, before any TensorFlow import**, with a
+comment explaining why. Getting this wrong crashes the whole API — not the one
+request — the first time someone switches models mid-demo.
+
+### 5.6 The YOLO model is binary and must be retrained
+
+`models/yolo_cls.pt` reports `names: {0: 'GC', 1: 'PC'}`. It has **two classes,
+not three** — `scripts/train_yolo.py` trains on `data/yolo_cls_binary`, whose
+docstring states "GC vs PC only, **NC dropped**".
+
+Two consequences:
+
+1. **It cannot serve the three-tier contract.** It can never output NC, the tier
+   that gates "skip restoration, go straight to 3D."
+2. **The 80.37% figure is not comparable to the ResNet's 74.66%.** It is accuracy
+   on an easier two-class problem. Presenting them side by side as a model
+   comparison — in the UI or in the report — would be misleading.
+
+**Fix: retrain on the three-class data, which is already prepared.**
+`data/yolo_cls/` holds train GC 525 / NC 322 / PC 379 and val 67 / 39 / 40. The
+change to `scripts/train_yolo.py` is the `data=` path; 30 epochs at 224px on the
+1650 Ti is minutes, not hours. The resulting top-1 accuracy — whatever it turns
+out to be — is the number that ships, and it is genuinely comparable.
+
+If the retrain underperforms badly, YOLO is dropped from the roster rather than
+shipped with a flattering incomparable number.
 
 ## 6. Repair pipeline (2D)
 
@@ -432,8 +484,9 @@ checked and updated in the same pass:
 - **how-it-works page** — `DatasetSection`, `ModelSection`, `MetricsSection`, and
   `ConfusionMatrixSlot` describe a six-level model. These stop being placeholders:
   the dataset is PHI-Net (PEER, UC Berkeley), Task 5 Collapse Mode; the
-  architecture is ResNet50 transfer learning; accuracy is 74.66% (80.37% for
-  YOLO). The confusion matrix becomes 3×3.
+  architecture is ResNet50 transfer learning; accuracy is 74.66%, alongside the
+  retrained three-class YOLO figure (§5.6 — **not** the old binary 80.37%). The
+  confusion matrix becomes 3×3.
 - **`ReportSheet`** (PDF print stylesheet) — renders level, probabilities, and the
   scale strip.
 - **Landing copy** — any "six damage levels" phrasing in `messages/{en,ar}.json`.
@@ -511,8 +564,9 @@ Ordered so that stopping at the end of any day still leaves a working demo.
 3. **Job API + 3D.** Tripo port, `ModelPanel`, `<model-viewer>`. Demo: photo → 3D.
 4. **Repair.** Isolation, Canny, Gemini, diff, `StageCanvas`, `PromptEditor`.
    Demo: the whole pipeline.
-5. **Model picker + YOLO + `raed` stub + polish.** Three-way roster,
-   `ENABLED_MODELS`, EN/AR pass, a11y pass, 390px/1440px.
+5. **Model picker + YOLO retrain + `raed` stub + polish.** Three-way roster,
+   `ENABLED_MODELS`, EN/AR pass, a11y pass, 390px/1440px. The retrain (§5.6) is
+   minutes of GPU time and can start in the background on any earlier day.
 6. **Fixtures + verification.** Pre-generate demo assets, E2E both locales.
 7. **Buffer.** Raed's classifier if it arrives; docs; `CLAUDE.md` update.
 
