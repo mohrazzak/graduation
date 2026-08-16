@@ -1,8 +1,8 @@
 // The ONLY data-access layer for analyses + their stored images: storage
 // upload/remove/signed-url and analyses CRUD over the browser Supabase client.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getLevel } from "../levels";
-import type { Analysis, Prediction } from "../types";
+import { DAMAGE_TIERS, getTier } from "../tiers";
+import type { Analysis, Prediction, TierProbabilities } from "../types";
 import { isSupabaseConfigured } from "./auth";
 import { getSupabaseBrowserClient } from "./client";
 import type { Database } from "./database.types";
@@ -91,9 +91,11 @@ export async function saveAnalysis(input: {
       user_id: userId,
       image_path: imagePath,
       heatmap_path: heatmapPath,
-      level: input.prediction.level,
+      tier: input.prediction.tier,
       confidence: input.prediction.confidence,
       probabilities: input.prediction.probabilities,
+      damage_percent: input.prediction.damage_percent,
+      model_id: input.prediction.model.id,
     })
     .select()
     .single();
@@ -102,7 +104,7 @@ export async function saveAnalysis(input: {
     return { data: null, error: "save_failed" };
   }
 
-  // Unreachable in practice (the DB check constraint enforces level 0-5),
+  // Unreachable in practice (the DB check constraint enforces NC/PC/GC),
   // but mapping through toAnalysis keeps the narrowing in one place.
   const analysis = toAnalysis(row);
   if (analysis === null) {
@@ -130,7 +132,7 @@ export async function listAnalyses(): Promise<Result<Analysis[]>> {
   if (error || rows === null) {
     return { data: null, error: "load_failed" };
   }
-  // WHY filter instead of throw: one row with an impossible level value (e.g.
+  // WHY filter instead of throw: one row with an impossible tier value (e.g.
   // after a manual DB edit) must not crash the whole history page; dropping
   // it defensively keeps every valid assessment visible.
   const analyses = rows
@@ -199,8 +201,9 @@ async function removeQuietly(
   }
 }
 
-// Validates a DB row into the shared Analysis type, or null when the level is
-// outside 0-5 (rows are validated rather than trusted, same as API responses).
+// Validates a DB row into the shared Analysis type, or null when the tier or
+// probabilities are malformed (rows are validated rather than trusted, same as
+// API responses).
 function toAnalysis(row: AnalysesRow): Analysis | null {
   try {
     return {
@@ -208,14 +211,34 @@ function toAnalysis(row: AnalysesRow): Analysis | null {
       user_id: row.user_id,
       image_path: row.image_path,
       heatmap_path: row.heatmap_path,
-      level: getLevel(row.level).id,
+      tier: getTier(row.tier).code,
       confidence: row.confidence,
-      probabilities: row.probabilities,
+      probabilities: toTierProbabilities(row.probabilities),
+      damage_percent: row.damage_percent,
+      model_id: row.model_id,
       created_at: row.created_at,
     };
   } catch {
     return null;
   }
+}
+
+// Narrows an untyped jsonb column into TierProbabilities. Built by iterating
+// the scale so a row missing a tier is rejected rather than silently defaulted.
+function toTierProbabilities(value: unknown): TierProbabilities {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("probabilities is not a tier-keyed object");
+  }
+  const entries = value as Record<string, unknown>;
+  const probabilities = {} as TierProbabilities;
+  for (const { code } of DAMAGE_TIERS) {
+    const probability = entries[code];
+    if (typeof probability !== "number" || !Number.isFinite(probability)) {
+      throw new TypeError(`probabilities.${code} is missing or not a number`);
+    }
+    probabilities[code] = probability;
+  }
+  return probabilities;
 }
 
 // The mock API ships the heatmap as raw base64 (no data: prefix); storage

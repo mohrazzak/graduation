@@ -1,10 +1,10 @@
 "use client";
-// One saved assessment in the history grid: thumbnail, mini scale, level name,
+// One saved assessment in the history grid: thumbnail, mini scale, tier name,
 // confidence + date in mono. The whole card is a button opening the detail modal.
 import { useFormatter, useTranslations } from "next-intl";
 import { CornerTicks } from "@/components/ui/CornerTicks";
-import { ScaleStrip } from "@/components/ui/ScaleStrip";
-import { getLevel } from "@/lib/levels";
+import { TierStrip } from "@/components/ui/TierStrip";
+import { getTier } from "@/lib/tiers";
 import type { Analysis } from "@/lib/types";
 
 export interface AnalysisCardProps {
@@ -17,8 +17,8 @@ export interface AnalysisCardProps {
 export function AnalysisCard({ analysis, imageUrl, onOpen }: AnalysisCardProps) {
   const t = useTranslations();
   const format = useFormatter();
-  const level = getLevel(analysis.level);
-  const levelName = t(`levels.${level.key}.name`);
+  const tier = getTier(analysis.tier);
+  const tierName = t(`tiers.${tier.key}.name`);
 
   return (
     // A real <button> so the whole card is keyboard-operable for free; inner
@@ -34,19 +34,19 @@ export function AnalysisCard({ analysis, imageUrl, onOpen }: AnalysisCardProps) 
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={imageUrl}
-          alt={levelName}
+          alt={tierName}
           className="block aspect-[4/3] w-full rounded object-cover"
         />
       ) : (
         // Signing failed for this item only: keep the card usable with a
-        // quiet mono level placeholder instead of a broken image.
+        // quiet mono tier placeholder instead of a broken image.
         <span className="flex aspect-[4/3] w-full items-center justify-center rounded bg-bg font-mono text-4xl text-muted">
-          {t("common.levelDigit", { id: String(level.id) })}
+          {tier.code}
         </span>
       )}
-      <ScaleStrip size="md" activeLevel={level.id} className="mt-4" />
+      <TierStrip size="md" activeTier={tier.code} className="mt-4" />
       <span className="mt-3 block font-display text-sm font-bold uppercase tracking-wider">
-        {levelName}
+        {tierName}
       </span>
       <span className="mt-2 flex items-baseline justify-between gap-3 font-mono text-xs text-muted">
         <span>

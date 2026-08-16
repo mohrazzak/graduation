@@ -1,24 +1,24 @@
 "use client";
-// THE SCALE — the 6-segment brand strip (spec section 8), reused as navbar logo (sm),
+// THE SCALE — the 3-segment brand strip, reused as navbar logo (sm),
 // result/history strip (md), and the animated landing hero scale (lg).
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { DAMAGE_LEVELS, type DamageLevelId } from "@/lib/levels";
+import { DAMAGE_TIERS, type TierCode } from "@/lib/tiers";
 
-export type ScaleStripSize = "sm" | "md" | "lg";
+export type TierStripSize = "sm" | "md" | "lg";
 
-export interface ScaleStripProps {
-  size: ScaleStripSize;
+export interface TierStripProps {
+  size: TierStripSize;
   /** Highlights this segment and dims the rest. */
-  activeLevel?: DamageLevelId;
-  /** lg hero entrance: segments light up 0 -> 5 in sequence (reduced motion: all lit). */
+  activeTier?: TierCode;
+  /** lg hero entrance: segments light up NC -> GC in sequence (reduced motion: all lit). */
   animateIn?: boolean;
   /** Exposes the strip to assistive tech; decorative (aria-hidden) when omitted. */
   label?: string;
   className?: string;
 }
 
-const TRACK_CLASSES: Record<ScaleStripSize, string> = {
+const TRACK_CLASSES: Record<TierStripSize, string> = {
   sm: "h-[3px] w-8 gap-px",
   md: "h-1.5 w-full gap-0.5",
   lg: "h-3 w-full gap-1",
@@ -27,23 +27,23 @@ const TRACK_CLASSES: Record<ScaleStripSize, string> = {
 const STAGGER_S = 0.12;
 const DIMMED_OPACITY = 0.25;
 
-export function ScaleStrip({
+export function TierStrip({
   size,
-  activeLevel,
+  activeTier,
   animateIn = false,
   label,
   className,
-}: ScaleStripProps) {
+}: TierStripProps) {
   const reduced = useReducedMotion() ?? false;
   const entrance = animateIn && !reduced;
-  // Drop the entrance stagger once it has played so later activeLevel changes
+  // Drop the entrance stagger once it has played so later activeTier changes
   // (hero caption cycling, result reveal) respond with a plain fast fade.
   const [entered, setEntered] = useState(!entrance);
   useEffect(() => {
     if (!entrance) return undefined;
     const id = window.setTimeout(
       () => setEntered(true),
-      (DAMAGE_LEVELS.length * STAGGER_S + 0.25) * 1000,
+      (DAMAGE_TIERS.length * STAGGER_S + 0.25) * 1000,
     );
     return () => window.clearTimeout(id);
   }, [entrance]);
@@ -55,17 +55,17 @@ export function ScaleStrip({
         ? { role: "img", "aria-label": label }
         : { "aria-hidden": true })}
     >
-      {DAMAGE_LEVELS.map((level, index) => {
-        const isActive = activeLevel === level.id;
-        const dimmed = activeLevel !== undefined && !isActive;
+      {DAMAGE_TIERS.map((tier, index) => {
+        const isActive = activeTier === tier.code;
+        const dimmed = activeTier !== undefined && !isActive;
         return (
           <motion.span
-            key={level.id}
+            key={tier.code}
             className="flex-1"
             style={{
-              backgroundColor: level.color,
+              backgroundColor: tier.color,
               // Subtle self-colored glow marks the active segment.
-              boxShadow: isActive ? `0 0 8px ${level.color}` : undefined,
+              boxShadow: isActive ? `0 0 8px ${tier.color}` : undefined,
             }}
             initial={entrance ? { opacity: 0.15 } : false}
             animate={{ opacity: dimmed ? DIMMED_OPACITY : 1 }}

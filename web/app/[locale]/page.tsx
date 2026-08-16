@@ -2,7 +2,7 @@
 import { setRequestLocale } from "next-intl/server";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorksSection } from "@/components/landing/HowItWorksSection";
-import { LevelsGrid } from "@/components/landing/LevelsGrid";
+import { TiersGrid } from "@/components/landing/TiersGrid";
 
 interface LandingPageProps {
   params: Promise<{ locale: string }>;
@@ -17,7 +17,7 @@ export default async function LandingPage({ params }: LandingPageProps) {
     <>
       <Hero />
       <HowItWorksSection />
-      <LevelsGrid />
+      <TiersGrid />
     </>
   );
 }

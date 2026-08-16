@@ -17,10 +17,18 @@ type AnalysesRow = {
   user_id: string;
   image_path: string;
   heatmap_path: string | null;
-  level: number;
+  // 'NC' | 'PC' | 'GC', enforced by a check constraint. Typed as string here
+  // and narrowed in queries.ts, so a hand-edited row is rejected rather than
+  // trusted into the domain type.
+  tier: string;
   confidence: number;
-  // jsonb in Postgres, but this app only ever stores the 6-float vector.
-  probabilities: number[];
+  // jsonb: a tier-keyed object {"NC":f,"PC":f,"GC":f}. Untyped on purpose —
+  // queries.ts validates it.
+  probabilities: Json;
+  damage_percent: number;
+  model_id: string;
+  repaired_path: string | null;
+  model3d_path: string | null;
   created_at: string;
 };
 
@@ -29,9 +37,13 @@ type AnalysesInsert = {
   user_id: string;
   image_path: string;
   heatmap_path?: string | null;
-  level: number;
+  tier: string;
   confidence: number;
-  probabilities: number[];
+  probabilities: Json;
+  damage_percent: number;
+  model_id: string;
+  repaired_path?: string | null;
+  model3d_path?: string | null;
   created_at?: string;
 };
 

@@ -7,7 +7,7 @@ import { ReportDocument } from "@/components/report/ReportDocument";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import { ApiError, predictDamage, type ApiErrorKind } from "@/lib/api";
-import { getLevel } from "@/lib/levels";
+import { getTier } from "@/lib/tiers";
 import type { Prediction } from "@/lib/types";
 import { AnalyzeError } from "./AnalyzeError";
 import { DropZone } from "./DropZone";
@@ -162,9 +162,11 @@ export function AnalyzeClient() {
           <ReportDocument
             imageSrc={previewUrl}
             heatmapSrc={heatmapSrc === null ? null : `data:image/png;base64,${heatmapSrc}`}
-            level={prediction.level}
+            tier={prediction.tier}
             confidence={prediction.confidence}
             probabilities={prediction.probabilities}
+            damagePercent={prediction.damage_percent}
+            modelName={prediction.model.name}
             reportId={reportId}
             createdAt={reportedAt}
           />
@@ -181,7 +183,7 @@ export function AnalyzeClient() {
       <div aria-live="polite" role="status" className="sr-only">
         {phase === "done" && prediction !== null
           ? t("analyze.resultAnnouncement", {
-              name: t(`levels.${getLevel(prediction.level).key}.name`),
+              name: t(`tiers.${getTier(prediction.tier).key}.name`),
             })
           : null}
       </div>

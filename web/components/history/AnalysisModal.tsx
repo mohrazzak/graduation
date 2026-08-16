@@ -8,8 +8,8 @@ import { HeatmapToggle } from "@/components/analyze/HeatmapToggle";
 import { ImageWithHeatmap } from "@/components/analyze/ImageWithHeatmap";
 import { ReportDocument } from "@/components/report/ReportDocument";
 import { Button } from "@/components/ui/Button";
-import { ScaleStrip } from "@/components/ui/ScaleStrip";
-import { getLevel, isAlertLevel } from "@/lib/levels";
+import { TierStrip } from "@/components/ui/TierStrip";
+import { getTier, isAlertTier } from "@/lib/tiers";
 import type { Analysis } from "@/lib/types";
 import { ModalShell } from "./ModalShell";
 
@@ -40,9 +40,9 @@ export function AnalysisModal({
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
-  const level = getLevel(analysis.level);
-  const alert = isAlertLevel(level.id);
-  const levelName = t(`levels.${level.key}.name`);
+  const tier = getTier(analysis.tier);
+  const alert = isAlertTier(tier.code);
+  const tierName = t(`tiers.${tier.key}.name`);
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export function AnalysisModal({
 
   return (
     <ModalShell labelledBy={TITLE_ID} onClose={onClose}>
-      {/* Level-4/5 banner treatment, mirroring ResultPanel — the only alert surfaces. */}
+      {/* GC banner treatment, mirroring ResultPanel — the only alert surfaces. */}
       {alert ? (
         <span aria-hidden="true" className="hazard-stripe absolute inset-x-0 top-0" />
       ) : null}
@@ -78,7 +78,7 @@ export function AnalysisModal({
             alert ? "text-alert" : ""
           }`}
         >
-          {levelName}
+          {tierName}
         </h2>
         <Button variant="ghost" onClick={onClose}>
           {t("common.actions.close")}
@@ -87,7 +87,7 @@ export function AnalysisModal({
       {imageUrl !== null ? (
         <ImageWithHeatmap
           src={imageUrl}
-          alt={levelName}
+          alt={tierName}
           heatmapSrc={heatmapUrl}
           heatmapAlt={t("analyze.heatmapAlt")}
           heatmapVisible={heatmapVisible}
@@ -98,10 +98,10 @@ export function AnalysisModal({
           aria-hidden="true"
           className="mt-4 flex aspect-[4/3] items-center justify-center rounded border border-line bg-bg font-mono text-5xl text-muted"
         >
-          {t("common.levelDigit", { id: String(level.id) })}
+          {tier.code}
         </div>
       )}
-      <ScaleStrip size="md" activeLevel={level.id} className="mt-5" />
+      <TierStrip size="md" activeTier={tier.code} className="mt-5" />
       <p className="mt-4 flex flex-wrap items-baseline justify-between gap-3">
         <span className="flex items-baseline gap-3">
           <span className="text-xs uppercase tracking-wider text-muted">
@@ -157,7 +157,7 @@ export function AnalysisModal({
         )}
       </div>
       {deleteFailed ? (
-        // Hazard, not alert: #FF3B30 is reserved for level-4/5 surfaces (spec section 8).
+        // Hazard, not alert: #FF3B30 is reserved for GC surfaces (spec section 8).
         <p role="alert" className="mt-3 text-sm text-hazard">
           {t("history.deleteFailed")}
         </p>
@@ -166,9 +166,11 @@ export function AnalysisModal({
       <ReportDocument
         imageSrc={imageUrl}
         heatmapSrc={heatmapUrl}
-        level={analysis.level}
+        tier={analysis.tier}
         confidence={analysis.confidence}
         probabilities={analysis.probabilities}
+        damagePercent={analysis.damage_percent}
+        modelName={analysis.model_id}
         reportId={analysis.id.slice(0, 8).toUpperCase()}
         createdAt={new Date(analysis.created_at)}
       />

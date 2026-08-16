@@ -1,10 +1,10 @@
 "use client";
 // Command-center strip above the history grid: total, average confidence,
-// and a six-bar level histogram in ramp colors (spec: premium-upgrade A5).
+// and a three-bar tier histogram in ramp colors.
 import { motion, useReducedMotion } from "framer-motion";
 import { useFormatter, useTranslations } from "next-intl";
 import { CornerTicks } from "@/components/ui/CornerTicks";
-import { DAMAGE_LEVELS } from "@/lib/levels";
+import { DAMAGE_TIERS } from "@/lib/tiers";
 import type { Analysis } from "@/lib/types";
 
 export interface HistoryStatsProps {
@@ -15,11 +15,10 @@ const STAGGER_S = 0.06;
 
 export function HistoryStats({ analyses }: HistoryStatsProps) {
   const t = useTranslations("history.stats");
-  const tCommon = useTranslations("common");
   const format = useFormatter();
   const reduced = useReducedMotion() ?? false;
-  const counts = DAMAGE_LEVELS.map(
-    (level) => analyses.filter((analysis) => analysis.level === level.id).length,
+  const counts = DAMAGE_TIERS.map(
+    (tier) => analyses.filter((analysis) => analysis.tier === tier.code).length,
   );
   const max = Math.max(...counts, 1);
   const average =
@@ -44,15 +43,15 @@ export function HistoryStats({ analyses }: HistoryStatsProps) {
         <div className="min-w-48 flex-1">
           <p className="text-xs uppercase tracking-wider text-muted">{t("distribution")}</p>
           <ul className="mt-2 flex h-16 items-end gap-1.5">
-            {DAMAGE_LEVELS.map((level, index) => {
-              const count = counts[level.id] ?? 0;
+            {DAMAGE_TIERS.map((tier, index) => {
+              const count = counts[index] ?? 0;
               return (
-                <li key={level.id} className="flex h-full flex-1 flex-col gap-1">
+                <li key={tier.code} className="flex h-full flex-1 flex-col gap-1">
                   {/* The track owns the percentage context; the label below never steals height. */}
                   <span className="relative block min-h-0 flex-1">
                     <motion.span
                       className="absolute inset-x-0 bottom-0 block"
-                      style={{ backgroundColor: level.color }}
+                      style={{ backgroundColor: tier.color }}
                       initial={reduced ? false : { height: "0%" }}
                       animate={{ height: `${Math.max((count / max) * 100, 3)}%` }}
                       transition={
@@ -61,9 +60,7 @@ export function HistoryStats({ analyses }: HistoryStatsProps) {
                     />
                   </span>
                   <span className="text-center font-mono text-[10px] text-muted">
-                    {tCommon("levelDigit", { id: String(level.id) })}
-                    {" "}
-                    {format.number(count)}
+                    {tier.code} {format.number(count)}
                   </span>
                 </li>
               );
