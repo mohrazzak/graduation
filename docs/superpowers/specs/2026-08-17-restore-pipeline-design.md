@@ -27,8 +27,8 @@ Nothing here is invented; it all exists on disk today.
 
 | What | Where | Notes |
 |------|-------|-------|
-| ResNet50 classifier | `/home/mohrazzak/projects/graduation/best_model.keras` | PHI-Net Task 5 (Collapse Mode), 74.66% val accuracy, ~95 MB |
-| YOLO classifier | `/home/mohrazzak/projects/graduation/models/yolo_cls.pt` | Same 3 classes, 80.37% accuracy |
+| ResNet50 classifier | `/home/mohrazzak/projects/graduation/best_model.keras` | PHI-Net Task 5 (Collapse Mode), 74.66% val accuracy, ~97 MB |
+| YOLO classifier | `/home/mohrazzak/projects/graduation/models/yolo_cls.pt` | Was 2-class (GC/PC); **retrained** to 3 classes, 71.23% — see §5.6 |
 | Damage % + recommendations | `/home/mohrazzak/projects/graduation/CLAUDE.md` | Formula and EN+AR recommendation text, already written |
 | Building isolation (the mask) | `.../A-Smart-Site-.../ai/helpers/image_to_isolated.py` | SegFormer ADE20K + sky flood-fill + edge density + GrabCut |
 | 3D reconstruction | `.../A-Smart-Site-.../ai/generate_3d_fast.py` | Tripo AI: upload → task → poll → GLB with PBR |
@@ -145,7 +145,7 @@ array). Approved deliberately; `CLAUDE.md` is updated in the same change.
 { "models": [
   { "id": "resnet50-phinet", "name": "ResNet50 (PHI-Net)", "accuracy": 0.7466,
     "available": true,  "reason": null },
-  { "id": "yolo-cls",        "name": "YOLOv8-cls",         "accuracy": 0.8037,
+  { "id": "yolo-cls",        "name": "YOLO11-cls",         "accuracy": 0.7123,
     "available": true,  "reason": null },
   { "id": "raed",            "name": "Raed's model",       "accuracy": null,
     "available": false, "reason": "weights_missing" }
@@ -315,16 +315,28 @@ becomes the unit test.
 The working venv is `/home/mohrazzak/projects/graduation/.venv`. The API's own
 venv has neither framework; the heavy requirements are installed there (§5).
 
-#### ⚠ Import order is load-bearing: torch before TensorFlow
+#### ⚠ Import order is load-bearing: the torch stack before TensorFlow
 
-Importing torch **after** TensorFlow **segfaults the process** (verified: exit
-139, core dumped). Importing torch **first** lets both coexist cleanly.
+Measured, and stronger than it first appeared. The initial probe only proved the
+two *imports* could share a process; running real inference through both revealed
+the actual rule:
 
-Since the registry offers a Keras backend and an Ultralytics backend in one
-FastAPI process, and a user can switch between them at runtime, the registry
-module **imports torch at module load, before any TensorFlow import**, with a
-comment explaining why. Getting this wrong crashes the whole API — not the one
-request — the first time someone switches models mid-demo.
+| Order | Result |
+|-------|--------|
+| `import ultralytics` **after** a Keras prediction | **SIGSEGV, exit 139** |
+| `import ultralytics` **before** TensorFlow is used | works in any order, including switching back and forth |
+
+**Importing `torch` early is not sufficient** — the crash is triggered by
+importing `ultralytics` itself. So `predict/registry.py` imports the whole torch
+stack (torch *and* ultralytics) at module load, before any backend can reach
+TensorFlow.
+
+This is the highest-severity failure mode in the project. It does not fail a
+request, it kills the API process, and it fires exactly when someone switches
+from ResNet to YOLO — that is, while demonstrating the model comparison. Because
+the failure is process death, no in-process test can catch it:
+`tests/test_backend_coexistence.py` runs four alternating predictions in a
+**subprocess** and asserts the exit code is not `-11`.
 
 ### 5.6 The YOLO model is binary and must be retrained
 

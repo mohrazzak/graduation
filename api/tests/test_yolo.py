@@ -6,7 +6,11 @@ import pytest
 
 from predict.registry import ModelUnavailableError
 
-SAMPLE = pathlib.Path(__file__).resolve().parents[2] / "demo" / "damaged" / "partial.jpg"
+# The committed demo sample, so the suite never depends on an untracked file.
+SAMPLE = (
+    pathlib.Path(__file__).resolve().parents[2]
+    / "web" / "public" / "samples" / "sample-PC.jpg"
+)
 
 
 def _backend():

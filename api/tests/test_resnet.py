@@ -9,7 +9,11 @@ import pytest
 
 from predict.registry import ModelUnavailableError
 
-SAMPLE = pathlib.Path(__file__).resolve().parents[2] / "demo" / "damaged" / "partial.jpg"
+# The committed demo sample, so the suite never depends on an untracked file.
+SAMPLE = (
+    pathlib.Path(__file__).resolve().parents[2]
+    / "web" / "public" / "samples" / "sample-PC.jpg"
+)
 
 
 def _backend():
@@ -25,7 +29,7 @@ def _backend():
 
 @pytest.mark.skipif(not SAMPLE.exists(), reason="sample image not present")
 def test_classifies_the_partial_damage_sample_as_pc():
-    """Measured 2026-08-17: GC 0.221 / NC 0.178 / PC 0.600.
+    """Measured 2026-08-17 on sample-PC.jpg: GC 0.239 / NC 0.042 / PC 0.719.
 
     This is the Caffe-preprocessing regression guard. If preprocessing drifts
     (RGB instead of BGR, /255 normalization, wrong means) the model still
@@ -34,9 +38,9 @@ def test_classifies_the_partial_damage_sample_as_pc():
     """
     prediction = _backend().classify(SAMPLE.read_bytes())
     assert prediction.tier == "PC"
-    assert prediction.probabilities["PC"] == pytest.approx(0.60, abs=0.05)
-    assert prediction.probabilities["GC"] == pytest.approx(0.22, abs=0.05)
-    assert prediction.probabilities["NC"] == pytest.approx(0.18, abs=0.05)
+    assert prediction.probabilities["PC"] == pytest.approx(0.719, abs=0.03)
+    assert prediction.probabilities["GC"] == pytest.approx(0.239, abs=0.03)
+    assert prediction.probabilities["NC"] == pytest.approx(0.042, abs=0.03)
 
 
 @pytest.mark.skipif(not SAMPLE.exists(), reason="sample image not present")
