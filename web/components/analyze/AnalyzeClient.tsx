@@ -13,10 +13,12 @@ import { AnalyzeError } from "./AnalyzeError";
 import { DropZone } from "./DropZone";
 import { HeatmapToggle } from "./HeatmapToggle";
 import { ImageWithHeatmap } from "./ImageWithHeatmap";
+import { ModelPicker } from "./ModelPicker";
 import { ResultPanel } from "./ResultPanel";
 import { SampleStrip } from "./SampleStrip";
 import { SaveFailedNote } from "./SaveFailedNote";
 import { ScanOverlay } from "./ScanOverlay";
+import { useModels } from "./useModels";
 import { useSaveAnalysis } from "./useSaveAnalysis";
 
 type Phase = "idle" | "ready" | "analyzing" | "done" | "error";
@@ -41,6 +43,7 @@ export function AnalyzeClient() {
   const [reportId, setReportId] = useState<string | null>(null);
   const [reportedAt, setReportedAt] = useState<Date | null>(null);
   const { status: saveStatus, errorCode: saveError, save, reset: resetSave } = useSaveAnalysis();
+  const { models, selected: selectedModel, select: selectModel } = useModels();
   // Monotonic id: any result landing after a reset/new selection is discarded.
   const requestIdRef = useRef(0);
   const previewUrlRef = useRef<string | null>(null);
@@ -79,7 +82,10 @@ export function AnalyzeClient() {
     setPhase("analyzing");
     setHeatmapVisible(false);
     try {
-      const [result] = await Promise.all([predictDamage(file), delay(MIN_SCAN_MS)]);
+      const [result] = await Promise.all([
+        predictDamage(file, selectedModel ?? undefined),
+        delay(MIN_SCAN_MS),
+      ]);
       if (requestId !== requestIdRef.current) return; // stale: user moved on
       setPrediction(result);
       setPhase("done");
@@ -91,7 +97,7 @@ export function AnalyzeClient() {
       setErrorKind(error instanceof ApiError ? error.kind : "server");
       setPhase("error");
     }
-  }, [file, phase, save]);
+  }, [file, phase, save, selectedModel]);
 
   const reset = useCallback(() => {
     requestIdRef.current += 1;
@@ -129,6 +135,12 @@ export function AnalyzeClient() {
             {t("common.actions.analyzePhoto")}
           </Button>
         ) : null}
+        <ModelPicker
+          models={models}
+          value={selectedModel}
+          onChange={selectModel}
+          disabled={phase === "analyzing"}
+        />
         <SampleStrip onSample={selectFile} disabled={phase === "analyzing"} />
       </div>
 
