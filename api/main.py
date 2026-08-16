@@ -1,5 +1,6 @@
 """FastAPI entrypoint: CORS plus the tier-based contract routes from the
-restore-pipeline spec section 4 — GET /health, GET /models, POST /predict."""
+restore-pipeline spec — GET /health, GET /models, POST /predict, and the
+polled job routes for restoration and 3D reconstruction."""
 
 import io
 import os
@@ -13,8 +14,6 @@ from PIL import Image
 
 from jobs import model3d, repair
 from jobs.store import store as job_store
-from predict.tiers import TIER_ORDER
-
 from predict.registry import (
     ModelUnavailableError,
     UnknownModelError,
@@ -22,6 +21,7 @@ from predict.registry import (
     get_classifier,
     list_models,
 )
+from predict.tiers import TIER_ORDER
 from schemas import (
     HealthResponse,
     ModelInfoResponse,

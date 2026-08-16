@@ -57,8 +57,29 @@ def _post_json(url: str, key: str, payload: dict) -> dict:
         data=json.dumps(payload).encode(),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        return json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as exc:
+        # Tripo reports an empty balance as HTTP 403 with body code 2010 — not
+        # 402 — so the status alone would misreport it as a backend fault. This
+        # is the error a $0 account actually hits, so it gets named properly.
+        detail = exc.read().decode(errors="ignore")
+        if exc.code == 403 and '"code":2010' in detail.replace(" ", ""):
+            raise Model3DUnavailable("quota_exceeded") from exc
+        raise
+
+
+def account_balance(key: str) -> float | None:
+    """Remaining Tripo credit, or None when the endpoint cannot be read.
+
+    Used to tell "out of credit" apart from "broken" before spending a request.
+    """
+    try:
+        data = _get_json(f"{API_ROOT}/user/balance", key)
+        return float(data.get("data", {}).get("balance", 0))
+    except Exception:  # noqa: BLE001 - a missing balance is not fatal
+        return None
 
 
 def _get_json(url: str, key: str) -> dict:
@@ -80,6 +101,12 @@ def generate_glb(image_bytes: bytes, on_stage) -> bytes:  # noqa: ANN001 - callb
     key = os.environ.get("TRIPO_API_KEY", "").strip()
     if not key:
         raise Model3DUnavailable("no_api_key")
+
+    # A zero balance is the failure a free account actually hits. Checking it
+    # first turns a confusing mid-pipeline 403 into an immediate, honest reason.
+    balance = account_balance(key)
+    if balance is not None and balance <= 0:
+        raise Model3DUnavailable("quota_exceeded")
 
     try:
         on_stage("uploading", 1)
