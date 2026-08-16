@@ -1,45 +1,76 @@
 # DamageScale — AI Building-Damage Classifier (Graduation Project)
 
-Demo web app: users register, upload a building photo, an AI model classifies it
-into one of six damage levels with confidence scores and a Grad-CAM heatmap, and
-the result is saved to the user's personal history.
+Demo web app: users register, upload a building photo, a trained AI model
+classifies it into one of three collapse tiers with confidence, an estimated
+damage percentage and a rehabilitation recommendation, and the result is saved
+to the user's personal history.
 
-**The model is NOT trained yet.** Everything runs against a mock prediction
-endpoint (`MOCK_MODE=true`). The real model plugs into `api/predict/model.py`
-later with ZERO frontend changes.
+**The model IS trained.** Two classifiers ship and are selectable at runtime;
+a deterministic mock remains for environments without the weights. The real
+backends live in `api/predict/backends/`.
 
-**Build status (2026-06-12):** spec phases 1–7 shipped, Supabase cloud is
-PROVISIONED (schema + RLS + private bucket live; real URL + publishable key in
-`web/.env.local` and root `.env`, both gitignored), and the full
-register→analyze→history flow is E2E-verified in both locales. Shipped since:
-landing imagery + Cairo Arabic font, image-aware mock heatmap. In flight:
-premium upgrade (page backdrops, live scan log, heatmap reveal slider, history
-stats, PDF report) + deployment (Vercel/Render free tier at project.razzak.me,
-plus a VPS-ready Caddy compose stack). Still pending on the user: disable
-"Confirm email" in the Supabase dashboard (UI registration is blocked until
-then) and fill the footer university/supervisor placeholder names.
+**Build status (2026-08-17):** the six-level scale has been replaced by the
+three PHI-Net collapse tiers on branch `feat/three-tier-pipeline`. Shipped:
+tier domain module, classifier registry (`resnet50-phinet`, `yolo-cls`, `raed`,
+`mock`) with `ENABLED_MODELS`, tier-based `/predict` + `/models`, the whole web
+migration, real evaluation metrics on how-it-works, and verified per-tier demo
+samples. In flight: applying the DB migration (needs the Supabase password),
+then phases 2-4 — job API, Gemini 2D repair, Tripo 3D + model-viewer.
+Still pending on the user: disable "Confirm email" in the Supabase dashboard
+and fill the footer university/supervisor placeholder names.
 
 Authoritative documents — read before changing anything:
 
-- Master spec (follow exactly): [docs/superpowers/specs/2026-06-12-damagescale-design.md](docs/superpowers/specs/2026-06-12-damagescale-design.md)
+- **Current spec (follow this):** [docs/superpowers/specs/2026-08-17-restore-pipeline-design.md](docs/superpowers/specs/2026-08-17-restore-pipeline-design.md)
+- Superseded master spec (six-level scale, frozen contract — both replaced):
+  [docs/superpowers/specs/2026-06-12-damagescale-design.md](docs/superpowers/specs/2026-06-12-damagescale-design.md)
 - Amendments: [landing imagery + Cairo](docs/superpowers/specs/2026-06-12-landing-imagery-cairo-design.md), [premium upgrade + deploy](docs/superpowers/specs/2026-06-12-premium-upgrade-deploy-design.md)
-- Implementation plans live in `docs/superpowers/plans/` (one per feature; the
-  current ones: premium-upgrade, deploy-free-hosting).
+- Implementation plans live in `docs/superpowers/plans/` (current:
+  restore-pipeline-phase1).
 
-## The six damage levels (the core domain)
+## The three collapse tiers (the core domain)
 
-| Level | English           | Arabic       | Ramp color |
-| ----- | ----------------- | ------------ | ---------- |
-| 0     | Intact            | سليم         | `#22C55E`  |
-| 1     | Minor damage      | ضرر طفيف     | `#A3E635`  |
-| 2     | Moderate damage   | ضرر متوسط    | `#FACC15`  |
-| 3     | Severe damage     | ضرر بالغ     | `#F97316`  |
-| 4     | Partial collapse  | انهيار جزئي  | `#EF4444`  |
-| 5     | Total destruction | دمار كامل    | `#991B1B`  |
+PHI-Net Task 5 (Collapse Mode), from PEER at UC Berkeley — these are the classes
+the models actually emit.
 
-Single source of truth in code: `web/lib/levels.ts` (`DAMAGE_LEVELS`). Never
-hardcode level colors/names anywhere else. Levels 4–5 are "alert" levels (red
-hazard-stripe banner treatment; `alert` color reserved for them only).
+| Code | English          | Arabic       | Ramp color |
+| ---- | ---------------- | ------------ | ---------- |
+| `NC` | Non-collapse     | لا انهيار    | `#22C55E`  |
+| `PC` | Partial collapse | انهيار جزئي  | `#F97316`  |
+| `GC` | Global collapse  | انهيار كامل  | `#991B1B`  |
+
+Single source of truth: `web/lib/tiers.ts` (`DAMAGE_TIERS`) and
+`api/predict/tiers.py`. Never hardcode tier colors/names anywhere else.
+**`GC` is the only alert tier** (red hazard-stripe banner; `alert` color
+reserved for it).
+
+⚠ **`NC` does NOT mean "intact."** PHI-Net defines it as *"intact OR minor
+damage, structure remains."* Never label it undamaged in copy or at the defense.
+
+⚠ **The alphabetical-index trap.** Both models emit classes ALPHABETICALLY
+(`0=GC, 1=NC, 2=PC`) while the UI orders by severity (`NC → PC → GC`). The
+conversion lives in exactly one place — `probabilities_from_model()` in
+`api/predict/tiers.py` — and **the API never puts an index on the wire**.
+Responses are keyed by tier code so the mislabeling bug cannot be written.
+
+### Trained models
+
+| id | What | Val accuracy |
+| -- | ---- | ------------ |
+| `resnet50-phinet` | Keras ResNet50 + ImageNet transfer learning | **74.66%** |
+| `yolo-cls` | Ultralytics YOLO11-cls | **71.23%** |
+| `raed` | Raed's classifier — registered, awaiting weights | — |
+| `mock` | Deterministic hash-seeded, no heavy deps | — |
+
+Both figures are top-1 on the same 146-image validation split. An older YOLO
+model scored 80.37% — that was a TWO-class split with NC dropped, is not
+comparable, and must never be published. Weights live outside the repo at
+`/home/mohrazzak/projects/graduation/` (`RESNET_WEIGHTS_PATH`,
+`YOLO_WEIGHTS_PATH`, `RAED_WEIGHTS_PATH`).
+
+`ENABLED_MODELS` (comma-separated ids) controls the picker roster; default is
+`resnet50-phinet,yolo-cls,raed`. `ENABLED_MODELS=raed` shows his alone.
+`ENABLED_MODELS=mock` is what CI and the cloud deploy use.
 
 ## Tech stack (FIXED — do not substitute)
 
@@ -47,9 +78,9 @@ hazard-stripe banner treatment; `alert` color reserved for them only).
   (`/en` + `/ar`, RTL), @supabase/supabase-js + @supabase/ssr, framer-motion,
   react-dropzone, lucide-react.
 - **api/**: FastAPI (Python 3.11+), uvicorn, python-multipart, Pillow.
-  Prediction sits behind `predict(image_bytes) -> Prediction` in
-  `api/predict/interface.py`; `mock.py` (deterministic, hash-seeded) vs
-  `model.py` (future real model) chosen by `MOCK_MODE`.
+  Classification sits behind the `Classifier` protocol in
+  `api/predict/interface.py`; concrete backends live in `api/predict/backends/`
+  and are selected per request from `api/predict/registry.py`.
 - **Supabase cloud**: email+password auth ONLY (no OAuth), `analyses` table,
   private storage bucket `analysis-images`. Schema: `supabase/schema.sql`.
 - **Deploy**: `docker compose up` → web :3000 + api :8000.
@@ -61,13 +92,18 @@ docker-compose.yml
 web/                    Next.js app
   app/[locale]/         pages: landing, analyze*, history*, how-it-works, login, register  (*=auth)
   components/{ui,analyze,history,layout,...}
-  lib/levels.ts         single source of truth for the 0-5 scale
+  lib/tiers.ts          single source of truth for the NC/PC/GC scale
+  lib/evaluation.ts     measured accuracy, confusion matrices, dataset splits
   lib/types.ts          Prediction, Analysis (shared types)
   lib/api.ts            ONLY place that calls FastAPI (typed, timeout, errors)
   lib/supabase/         ONLY place that calls Supabase (client/server/queries)
   messages/{en,ar}.json ALL UI strings (zero hardcoded text in JSX)
   middleware.ts         next-intl + Supabase session refresh + auth guard
-api/                    FastAPI app (main.py, schemas.py, predict/, tests/)
+api/                    FastAPI app (main.py, schemas.py, tests/)
+  predict/tiers.py      the NC/PC/GC scale + the alphabetical->code conversion
+  predict/registry.py   backend roster, ENABLED_MODELS  (⚠ torch import order)
+  predict/backends/     resnet.py, yolo.py, raed.py, mock_backend.py
+  requirements-models.txt  optional heavy deps (TensorFlow, torch, ultralytics)
 supabase/schema.sql     run in Supabase dashboard (table + RLS + storage policies)
 ```
 
@@ -82,21 +118,40 @@ npm run lint
 
 # api (from api/, venv at api/.venv)
 uvicorn main:app --reload --port 8000
-pytest -q                # must pass
-ruff check .             # must be clean
+ENABLED_MODELS=mock pytest -q   # must pass; mock roster keeps it off TensorFlow
+pytest -q                       # full run, loads the real weights (slow)
+ruff check .                    # must be clean
+pip install -r requirements-models.txt   # optional: the real classifiers (~3 GB)
 
 # full demo (repo root)
 docker compose up        # web :3000 + api :8000
 ```
 
-## API contract (frozen — frontend depends on it)
+## API contract (tier-based — frontend depends on it)
 
-- `POST /predict` — multipart field `file` (jpeg/png/webp, ≤10 MB) →
-  `{"level": 0-5, "confidence": 0-1, "probabilities": [6 floats ≈ sum 1], "heatmap_base64": "<png>"|null}`;
-  errors 400/500 → `{"detail": "..."}`.
-- `GET /health` → `{"status": "ok", "mock": true|false}`.
+- `POST /predict?model=<id>` — multipart field `file` (jpeg/png/webp, ≤10 MB) →
+  ```jsonc
+  { "tier": "NC"|"PC"|"GC", "confidence": 0-1,
+    "probabilities": {"NC": f, "PC": f, "GC": f},   // keyed by CODE, never index
+    "damage_percent": 0-100,
+    "model": {"id": "...", "name": "...", "accuracy": 0-1|null},
+    "heatmap_base64": "<png>"|null }
+  ```
+- `GET /models` → `{"models": [{id, name, accuracy, available, reason}]}`.
+  Unavailable backends are LISTED with a reason key, never hidden.
+- `GET /health` → `{"status": "ok", "mock": bool, "model": "<active id>"}`.
+- Unknown `model` → 400. Registered but unloadable → **503** (valid request, the
+  server just cannot serve that backend right now).
+- `damage_percent` = Σ probability × {NC:15, PC:60, GC:95} — a weighted
+  expectation, never presented as a measured survey figure.
+- Real backends return `heatmap_base64: null`; Grad-CAM is a later stretch, and
+  the mock matches them rather than faking an explanation no model produced.
 - Mock is deterministic: same image bytes → same result (hash-seeded RNG).
 - CORS allows `http://localhost:3000` (+ university server origin via `CORS_ORIGINS`).
+
+This REPLACED the old frozen contract (`level` 0-5 + six-float array) —
+a deliberate break, signed off, because code-keyed probabilities make the
+alphabetical-index bug unwriteable.
 
 ## Code quality rules (NON-NEGOTIABLE, from spec §3)
 
@@ -129,7 +184,7 @@ docker compose up        # web :3000 + api :8000
   reused in navbar logo, landing hero (animated), analyze result, history cards.
 - Restraint: border radius ≤ 4px, hairline `line` borders, corner tick marks on
   key cards, film-grain ~3% overlay, ONE hazard-stripe (45°, 8px) used only on
-  primary CTA top border + level-4/5 banner. No glassmorphism, no gradients.
+  primary CTA top border + the GC banner. No glassmorphism, no gradients.
 - Motion: analyze flow is the one orchestrated moment (scan line 1.2s loop,
   digit count-up, bars stagger 60ms); everything else 150–200ms fades only.
 - Copy voice: technical inspection register, short ("HOW BADLY IS IT DAMAGED?").
@@ -150,6 +205,19 @@ docker compose up        # web :3000 + api :8000
    domains).
 
 ## Ops notes for Claude sessions (hard-won, no secrets here)
+
+- ⚠ **TensorFlow + PyTorch coexistence is order-dependent and it SEGFAULTS.**
+  Importing `ultralytics` AFTER a Keras prediction kills the process (exit 139).
+  Importing it BEFORE any TensorFlow use is safe in either direction.
+  `api/predict/registry.py` imports the whole torch stack at module load for
+  exactly this reason — do not "tidy" those imports. Importing `torch` alone is
+  NOT enough. `api/tests/test_backend_coexistence.py` guards it in a subprocess,
+  since a dead process cannot be caught in-process.
+- Heavy model deps are in `api/requirements-models.txt`, deliberately NOT in
+  `requirements.txt`: the base image and the free-tier deploy run the mock.
+  Installing them pulls ~3 GB of CUDA wheels.
+- The GPU is a GTX 1650 Ti (4 GB); `torch.cuda.is_available()` is true, but
+  TensorFlow does not see CUDA drivers here and runs the ResNet on CPU.
 
 - Supabase SQL access: the direct `db.<ref>.supabase.co` host is IPv6-only and
   unreachable from this WSL2 box. Use the session pooler
@@ -180,13 +248,26 @@ docker compose up        # web :3000 + api :8000
 - [ ] Full flow works in BOTH `/en` and `/ar`; Arabic mirrors perfectly.
 - [ ] Register → analyze sample → animated result → auto-saved → in history →
       survives logout/login.
-- [ ] Same photo always yields the same mock result.
+- [ ] Same photo always yields the same result for a given model.
+- [ ] Switching models mid-session does NOT kill the API (segfault guard).
+- [ ] ResNet classifies `web/public/samples/sample-PC.jpg` as PC.
 - [ ] Keyboard-only navigation works; reduced-motion disables animations.
 - [ ] Looks incredible at 390px and 1440px.
 - [ ] One-command demo: `docker compose up`.
 
-## Later (out of scope until model is trained)
+## Later (phases 2-4 — see the restore-pipeline spec)
 
-Real model + Grad-CAM go into `api/predict/model.py` behind the existing
-`predict()` interface (pytorch-grad-cam or tf-keras-vis, overlay at 40–50%
-opacity, PNG base64). No frontend change allowed.
+- **Job API** — repair and 3D take 10 s to 3 min, so both run as polled jobs
+  (`POST /jobs/{service}` → id, `GET /jobs/{id}` → status + stage + artifacts).
+- **2D repair** — SegFormer building mask + Canny edges (both real artifacts the
+  UI displays), then Gemini 2.5 Flash Image instruction editing, then the
+  before/after diff. NO hand-drawn mask editor: instruction editing cannot honor
+  a mask, and shipping a canvas whose strokes are discarded would be a lie.
+- **3D** — Tripo AI (upload → task → poll → GLB with PBR), viewed with
+  `@google/model-viewer`.
+- **Grad-CAM** — ~30 lines of `tf.GradientTape` on the ResNet's last conv block,
+  reusing the existing overlay path. Until it lands, `heatmap_base64` is null
+  and every heatmap affordance hides itself.
+
+Out of scope entirely: OccFacade, cost estimation, the Depth Anything point
+cloud.
