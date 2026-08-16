@@ -1,7 +1,7 @@
 // Single FastAPI client: ALL frontend -> API traffic goes through here.
 // Throws ApiError; components translate by .kind (messages here are developer-facing).
-import { getLevel, type DamageLevelId } from "./levels";
-import type { Prediction } from "./types";
+import { DAMAGE_TIERS, getTier, type TierCode } from "./tiers";
+import type { ModelInfo, Prediction, TierProbabilities } from "./types";
 
 export type ApiErrorKind = "bad_file" | "server" | "network" | "timeout";
 
@@ -21,34 +21,64 @@ const PREDICT_TIMEOUT_MS = 30_000;
 const HEALTH_TIMEOUT_MS = 5_000;
 
 // Classifies a building photo via POST /predict and validates the response
-// against the frozen wire contract before handing it to the UI.
-export async function predictDamage(file: File | Blob): Promise<Prediction> {
+// against the wire contract before handing it to the UI. An explicit modelId
+// selects a backend from the GET /models roster.
+export async function predictDamage(
+  file: File | Blob,
+  modelId?: string,
+): Promise<Prediction> {
   const form = new FormData();
   form.append("file", file);
+  const path = modelId
+    ? `/predict?model=${encodeURIComponent(modelId)}`
+    : "/predict";
   const body = await requestJson(
-    "/predict",
+    path,
     { method: "POST", body: form },
     PREDICT_TIMEOUT_MS,
   );
   return toPrediction(body);
 }
 
-// GET /health — reports liveness and whether the mock predictor is active.
-export async function getHealth(): Promise<{ status: string; mock: boolean }> {
+// GET /models — the classifier roster the picker renders. Unavailable entries
+// are included on purpose: the UI disables them with a reason.
+export async function getModels(): Promise<ModelInfo[]> {
+  const body = await requestJson("/models", { method: "GET" }, HEALTH_TIMEOUT_MS);
+  if (typeof body !== "object" || body === null) {
+    throw new ApiError("server", "GET /models returned a body that is not an object");
+  }
+  const raw = (body as Record<string, unknown>).models;
+  if (!Array.isArray(raw)) {
+    throw new ApiError("server", "GET /models is missing the models array");
+  }
+  return raw.map(toModelInfo);
+}
+
+// GET /health — reports liveness, whether the mock is active, and which model.
+export async function getHealth(): Promise<{
+  status: string;
+  mock: boolean;
+  model: string;
+}> {
   const body = await requestJson("/health", { method: "GET" }, HEALTH_TIMEOUT_MS);
+  if (typeof body !== "object" || body === null) {
+    throw new ApiError(
+      "server",
+      "GET /health returned a body that violates the API contract",
+    );
+  }
+  const raw = body as Record<string, unknown>;
   if (
-    typeof body !== "object" ||
-    body === null ||
-    typeof (body as Record<string, unknown>).status !== "string" ||
-    typeof (body as Record<string, unknown>).mock !== "boolean"
+    typeof raw.status !== "string" ||
+    typeof raw.mock !== "boolean" ||
+    typeof raw.model !== "string"
   ) {
     throw new ApiError(
       "server",
       "GET /health returned a body that violates the API contract",
     );
   }
-  const { status, mock } = body as { status: string; mock: boolean };
-  return { status, mock };
+  return { status: raw.status, mock: raw.mock, model: raw.model };
 }
 
 // Fire-and-forget wake-up call: free-tier hosts put the API to sleep after
@@ -128,6 +158,27 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
+// Validates one untrusted model entry from /models or /predict.
+function toModelInfo(entry: unknown): ModelInfo {
+  if (typeof entry !== "object" || entry === null) {
+    throw contractViolation("a model entry is not an object");
+  }
+  const raw = entry as Record<string, unknown>;
+  if (typeof raw.id !== "string" || typeof raw.name !== "string") {
+    throw contractViolation("a model entry is missing id or name");
+  }
+  return {
+    id: raw.id,
+    name: raw.name,
+    accuracy:
+      typeof raw.accuracy === "number" && Number.isFinite(raw.accuracy)
+        ? raw.accuracy
+        : null,
+    available: raw.available !== false,
+    reason: typeof raw.reason === "string" ? raw.reason : null,
+  };
+}
+
 // Validates the untrusted /predict body against the Prediction contract.
 // Anything off-shape means the API broke its contract -> "server" error.
 function toPrediction(body: unknown): Prediction {
@@ -136,15 +187,15 @@ function toPrediction(body: unknown): Prediction {
   }
   const raw = body as Record<string, unknown>;
 
-  if (typeof raw.level !== "number") {
-    throw contractViolation("level is missing or not a number");
+  if (typeof raw.tier !== "string") {
+    throw contractViolation("tier is missing or not a string");
   }
-  let levelId: DamageLevelId;
+  let tier: TierCode;
   try {
-    // getLevel both validates (integer 0-5) and narrows to DamageLevelId.
-    levelId = getLevel(raw.level).id;
+    // getTier both validates and narrows to TierCode.
+    tier = getTier(raw.tier).code;
   } catch {
-    throw contractViolation(`level ${raw.level} is not an integer 0-5`);
+    throw contractViolation(`tier ${raw.tier} is not NC, PC, or GC`);
   }
 
   const confidence = raw.confidence;
@@ -157,27 +208,47 @@ function toPrediction(body: unknown): Prediction {
     throw contractViolation("confidence is not a number in 0..1");
   }
 
-  const probabilities = raw.probabilities;
+  const rawProbabilities = raw.probabilities;
   if (
-    !Array.isArray(probabilities) ||
-    probabilities.length !== 6 ||
-    !probabilities.every(
-      (p): p is number => typeof p === "number" && Number.isFinite(p),
-    )
+    typeof rawProbabilities !== "object" ||
+    rawProbabilities === null ||
+    Array.isArray(rawProbabilities)
   ) {
-    throw contractViolation("probabilities is not an array of 6 finite numbers");
+    throw contractViolation("probabilities is not a tier-keyed object");
+  }
+  const entries = rawProbabilities as Record<string, unknown>;
+  // Build by iterating the scale, so a missing or extra key cannot slip through.
+  const probabilities = {} as TierProbabilities;
+  for (const { code } of DAMAGE_TIERS) {
+    const value = entries[code];
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw contractViolation(`probabilities.${code} is missing or not a number`);
+    }
+    probabilities[code] = value;
+  }
+
+  const damagePercent = raw.damage_percent;
+  if (
+    typeof damagePercent !== "number" ||
+    !Number.isFinite(damagePercent) ||
+    damagePercent < 0 ||
+    damagePercent > 100
+  ) {
+    throw contractViolation("damage_percent is not a number in 0..100");
   }
 
   const heatmap = raw.heatmap_base64;
-  if (typeof heatmap !== "string" && heatmap !== null) {
+  if (typeof heatmap !== "string" && heatmap !== null && heatmap !== undefined) {
     throw contractViolation("heatmap_base64 is not a string or null");
   }
 
   return {
-    level: levelId,
+    tier,
     confidence,
     probabilities,
-    heatmap_base64: heatmap,
+    damage_percent: damagePercent,
+    model: toModelInfo(raw.model),
+    heatmap_base64: typeof heatmap === "string" ? heatmap : null,
   };
 }
 
