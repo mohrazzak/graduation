@@ -2,6 +2,10 @@
 -- HOW TO RUN: paste this whole file into the Supabase dashboard SQL editor
 -- (SQL Editor -> New query -> Run). One-time setup per project.
 --
+-- This is the CURRENT schema (three collapse tiers). A fresh project needs only
+-- this file — migrations/ applies only to a database still on the old
+-- six-level shape.
+--
 -- BEFORE/AFTER RUNNING, also in the dashboard:
 --   1. Storage -> create a PRIVATE bucket named exactly "analysis-images"
 --      (the storage policies below assume it; frontend reads via signed URLs).

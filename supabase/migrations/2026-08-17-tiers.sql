@@ -1,5 +1,10 @@
 -- Six levels -> three PHI-Net collapse tiers (NC / PC / GC).
 --
+-- ⚠ ONLY needed for a database that already has the OLD six-level table.
+-- Provisioning a NEW Supabase project? Run ../schema.sql instead — it already
+-- creates the three-tier shape, and this file will fail against it (there is no
+-- `level` column to drop).
+--
 -- Existing rows hold mock verdicts on a scale that no longer exists. Mapping
 -- them onto tiers would fabricate assessments no model ever produced, so they
 -- are deleted rather than migrated.
