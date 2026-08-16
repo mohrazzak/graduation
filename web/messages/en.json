@@ -45,7 +45,7 @@
       },
       "save": {
         "title": "Save",
-        "description": "Each assessment is stored in your history, image and heatmap included."
+        "description": "Each assessment is stored in your history with the photo, the class probabilities, and which model produced the verdict."
       }
     },
     "levelsTitle": "The three collapse classes",
