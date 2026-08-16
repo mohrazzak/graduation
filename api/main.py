@@ -3,12 +3,17 @@ restore-pipeline spec section 4 — GET /health, GET /models, POST /predict."""
 
 import io
 import os
+import threading
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from PIL import Image
+
+from jobs import model3d, repair
+from jobs.store import store as job_store
+from predict.tiers import TIER_ORDER
 
 from predict.registry import (
     ModelUnavailableError,
@@ -152,6 +157,100 @@ def create_app() -> FastAPI:
             ),
             heatmap_base64=prediction.heatmap_base64,
         )
+
+    # ---- Long-running services: restoration and 3D reconstruction ----------
+    # Both take far longer than a browser request tolerates, so both are jobs
+    # the client polls. Polling (not SSE) matches Tripo's own pattern, holds no
+    # connection open, and survives a sleeping free-tier dyno.
+
+    async def _read_upload(request: Request, file: UploadFile) -> bytes:
+        """Validate an uploaded image and return its bytes (shared with /predict)."""
+        if file.content_type not in _ALLOWED_CONTENT_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported file type. Upload a JPEG, PNG, or WebP image.",
+            )
+        declared_size = request.headers.get("content-length", "")
+        if declared_size.isdigit() and int(declared_size) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=400, detail=_TOO_LARGE_DETAIL)
+        data = await file.read()
+        if len(data) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=400, detail=_TOO_LARGE_DETAIL)
+        try:
+            Image.open(io.BytesIO(data)).verify()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="The file is not a valid image. Upload a real JPEG, PNG, or WebP photo.",
+            ) from exc
+        return data
+
+    @app.post("/jobs/repair")
+    async def start_repair(
+        request: Request,
+        file: UploadFile,
+        tier: str = Form(...),
+        prompt: str | None = Form(None),
+    ) -> dict[str, str]:
+        """Start a 2D restoration job.
+
+        The tier is REQUIRED: restoration is gated on classification, so a
+        request that never classified is rejected rather than guessed at.
+        """
+        if tier not in TIER_ORDER:
+            raise HTTPException(
+                status_code=400,
+                detail="A valid tier (NC, PC or GC) is required. Classify the photo first.",
+            )
+        data = await _read_upload(request, file)
+        job = job_store.create("repair", stage_total=len(repair.STAGE_KEYS))
+        threading.Thread(
+            target=repair.run, args=(job.id, data, tier, prompt), daemon=True
+        ).start()
+        return {"job_id": job.id}
+
+    @app.post("/jobs/model3d")
+    async def start_model3d(
+        request: Request,
+        file: UploadFile | None = None,
+        from_job: str | None = Form(None),
+    ) -> dict[str, str]:
+        """Start a 3D reconstruction job, from an upload or a finished repair."""
+        if from_job:
+            data = repair.repaired_bytes(from_job)
+            if data is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="That restoration job has no finished image to reconstruct.",
+                )
+        elif file is not None:
+            data = await _read_upload(request, file)
+        else:
+            raise HTTPException(
+                status_code=400, detail="Provide either a file or from_job."
+            )
+        job = job_store.create("model3d", stage_total=len(model3d.STAGE_KEYS))
+        threading.Thread(target=model3d.run, args=(job.id, data), daemon=True).start()
+        return {"job_id": job.id}
+
+    @app.get("/jobs/{job_id}")
+    def job_status(job_id: str) -> dict[str, object]:
+        """Poll a job: status, the stage it genuinely reached, ready artifacts."""
+        job = job_store.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Unknown or expired job.")
+        return job.to_status()
+
+    @app.get("/jobs/{job_id}/artifact/{name}")
+    def job_artifact(job_id: str, name: str) -> Response:
+        """Fetch one artifact's raw bytes (mask, edges, repaired, diff, model)."""
+        job = job_store.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Unknown or expired job.")
+        artifact = job.artifacts.get(name)
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="No such artifact on this job.")
+        return Response(content=artifact.data, media_type=artifact.content_type)
 
     return app
 
