@@ -143,15 +143,22 @@ array). Approved deliberately; `CLAUDE.md` is updated in the same change.
 
 ```jsonc
 { "models": [
-  { "id": "mock",            "name": "Mock",              "accuracy": null,   "available": true },
-  { "id": "resnet50-phinet", "name": "ResNet50 (PHI-Net)","accuracy": 0.7466, "available": true },
-  { "id": "yolo-cls",        "name": "YOLOv8-cls",        "accuracy": 0.8037, "available": false }
+  { "id": "resnet50-phinet", "name": "ResNet50 (PHI-Net)", "accuracy": 0.7466,
+    "available": true,  "reason": null },
+  { "id": "yolo-cls",        "name": "YOLOv8-cls",         "accuracy": 0.8037,
+    "available": true,  "reason": null },
+  { "id": "raed",            "name": "Raed's model",       "accuracy": null,
+    "available": false, "reason": "weights_missing" }
 ]}
 ```
 
 `available` reflects whether the backend's weights and dependencies actually
-load right now. The UI shows unavailable models as disabled with a reason, never
-hidden — a disabled entry is information, a missing one is a mystery.
+load right now. The UI shows unavailable models as **disabled with a reason,
+never hidden** — a disabled entry is information, a missing one is a mystery.
+`reason` is a message key (`weights_missing`, `dependency_missing`,
+`load_failed`), so the text is translated like everything else.
+
+The default selection is the first available model in list order.
 
 ### 4.3 `GET /health`
 
@@ -203,9 +210,39 @@ class Classifier(Protocol):
     def classify(self, image_bytes: bytes) -> Prediction: ...
 ```
 
-Backends: `mock` (deterministic, hash-seeded, always available),
-`resnet50-phinet`, `yolo-cls`, and an empty slot for Raed's model. Selection is
-per-request via `?model=`; the default comes from `DEFAULT_MODEL` in env.
+**Four backends ship, three of them user-facing:**
+
+| id | Backend | Accuracy | Status |
+|----|---------|----------|--------|
+| `resnet50-phinet` | Keras ResNet50, `best_model.keras` | 74.66% | ready |
+| `yolo-cls` | Ultralytics YOLOv8-cls, `yolo_cls.pt` | 80.37% | ready |
+| `raed` | Raed's classifier | TBD | **stub until weights arrive** |
+| `mock` | Deterministic hash-seeded | — | always available, hidden by default |
+
+Selection is per-request via `?model=`; the default is the first available model.
+
+The `raed` backend ships **now**, as a real registry entry whose loader looks for
+weights at `RAED_WEIGHTS_PATH` and reports `available: false` with reason
+`weights_missing` until they exist. When Raed sends the model, the work is
+dropping in the file and — if his architecture differs from Keras or Ultralytics
+— writing its `classify()`. Nothing else changes, and the picker lights up on its
+own.
+
+### 5.1 Which models the picker shows
+
+`ENABLED_MODELS` (comma-separated ids, env) controls the roster. It defaults to
+`resnet50-phinet,yolo-cls,raed` — the three-way comparison, which is a good
+defense talking point.
+
+To show **only Raed's model**, set `ENABLED_MODELS=raed`. The picker then has a
+single entry and collapses to a static label rather than rendering a
+one-option dropdown. `mock` is excluded by default and opted into explicitly
+(`ENABLED_MODELS=mock`) for CI and the cloud deployment.
+
+Ids in `ENABLED_MODELS` that match no registered backend are ignored with a
+startup warning — a typo must not silently empty the roster. If the resulting
+roster is empty, the API falls back to `mock` rather than serving a picker with
+nothing in it.
 
 **Heavy dependencies are optional.** TensorFlow (ResNet) and
 torch + ultralytics (YOLO) go in `api/requirements-models.txt`, not the base
@@ -218,7 +255,7 @@ keeps the base Docker image small.
 (`RESNET_WEIGHTS_PATH`, `YOLO_WEIGHTS_PATH`), defaulting to the paths in §2.
 `best_model.keras` is ~95 MB and is not committed to git.
 
-### 5.1 ResNet preprocessing — exact, and unforgiving
+### 5.2 ResNet preprocessing — exact, and unforgiving
 
 The model was trained with Caffe-style preprocessing. Getting this wrong yields
 confident garbage rather than an error:
@@ -235,14 +272,14 @@ Output shape `(1, 3)`, softmax, **alphabetical** — see §3.1.
 A unit test asserts a known sample image yields the expected tier, so a
 preprocessing regression fails the suite instead of the defense.
 
-### 5.2 The mock backend is rewritten, not retired
+### 5.3 The mock backend is rewritten, not retired
 
 `predict/mock.py` currently emits the six-level contract. It is rewritten to emit
 the three-tier one, staying deterministic and hash-seeded (same image → same
 tier). It remains the default when no weights are present, so the cloud
 deployment and CI keep working with zero heavy dependencies.
 
-### 5.3 Heatmaps: null in v1, Grad-CAM as a stretch
+### 5.4 Heatmaps: null in v1, Grad-CAM as a stretch
 
 The master spec promised "real model + Grad-CAM", the how-it-works page has a
 `GradCamSection`, and the mock has always returned a heatmap — so **the null
@@ -364,7 +401,8 @@ New components, each one responsibility, named export, under ~150 lines:
 
 ```
 components/analyze/
-  ModelPicker.tsx        model select, shows name + accuracy, disabled when unavailable
+  ModelPicker.tsx        model select: name + accuracy, disabled entries show a
+                         reason, collapses to a static label at one option
   DamageGauge.tsx        damage_percent, JetBrains Mono, count-up (reduced-motion gated)
   RecommendationCard.tsx tier-keyed bullets, severity styling
   ServiceRail.tsx        the tier-gated Restore / 3D buttons
@@ -456,7 +494,7 @@ canvases, viewers, and progress UI are exactly where they usually get dropped:
 | Risk | Mitigation |
 |------|------------|
 | Free quota dies mid-defense | **Pre-generate repair + 3D outputs for 2–3 sample buildings and ship them as fixtures.** A dead quota degrades the demo instead of ending it. This is the single most important mitigation and is not optional. |
-| ResNet preprocessing wrong | Unit test on a known sample asserting the expected tier (§5.1) |
+| ResNet preprocessing wrong | Unit test on a known sample asserting the expected tier (§5.2) |
 | Alphabetical index confusion | Codes end-to-end; conversion in one function (§3.1) |
 | TensorFlow bloats the image / breaks free tier | Optional requirements file; registry degrades to mock (§5) |
 | Raed's classifier arrives late | Registry slot; one module plus one line (§5) |
@@ -473,7 +511,8 @@ Ordered so that stopping at the end of any day still leaves a working demo.
 3. **Job API + 3D.** Tripo port, `ModelPanel`, `<model-viewer>`. Demo: photo → 3D.
 4. **Repair.** Isolation, Canny, Gemini, diff, `StageCanvas`, `PromptEditor`.
    Demo: the whole pipeline.
-5. **Model picker + YOLO backend + polish.** EN/AR pass, a11y pass, 390px/1440px.
+5. **Model picker + YOLO + `raed` stub + polish.** Three-way roster,
+   `ENABLED_MODELS`, EN/AR pass, a11y pass, 390px/1440px.
 6. **Fixtures + verification.** Pre-generate demo assets, E2E both locales.
 7. **Buffer.** Raed's classifier if it arrives; docs; `CLAUDE.md` update.
 
