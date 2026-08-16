@@ -50,6 +50,13 @@ export function ServiceRail({ file, tier, sourceSrc }: ServiceRailProps) {
               {t("repair.title")}
             </span>
             <span className="mt-1 block text-sm text-muted">{t("repair.intro")}</span>
+            {/* The caveat belongs BEFORE the decision to open, not just before
+                the decision to run — at total collapse it is the whole point. */}
+            {policy.restoreWarns ? (
+              <span className="mt-2 block border-s-2 border-hazard ps-3 text-sm text-hazard">
+                {t("repair.gcWarning")}
+              </span>
+            ) : null}
           </button>
         )
       ) : (

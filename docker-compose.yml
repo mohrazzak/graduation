@@ -26,6 +26,10 @@ services:
       # models, install api/requirements-models.txt, mount the weights, and set
       # ENABLED_MODELS + the *_WEIGHTS_PATH vars below.
       ENABLED_MODELS: ${ENABLED_MODELS:-mock}
+      # Generation services. Without these the job routes still run their LOCAL
+      # stages (building mask, edge map) and report a named reason for the rest.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      TRIPO_API_KEY: ${TRIPO_API_KEY:-}
       RESNET_WEIGHTS_PATH: ${RESNET_WEIGHTS_PATH:-}
       YOLO_WEIGHTS_PATH: ${YOLO_WEIGHTS_PATH:-}
       RAED_WEIGHTS_PATH: ${RAED_WEIGHTS_PATH:-}
