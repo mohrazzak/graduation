@@ -136,6 +136,7 @@ git commit -m "feat(web): add generated artifact save lifecycle"
 **Files:**
 - Create: `web/lib/supabase/artifactAttachment.mts`
 - Create: `web/tests/artifactAttachment.test.mjs`
+- Create: `web/tests/storagePolicy.integration.test.mjs`
 - Modify: `web/lib/supabase/queries.ts`
 - Verify: `supabase/schema.sql`
 - Verify: `supabase/migrations/2026-08-17-storage-update.sql`
@@ -191,9 +192,11 @@ On update failure, call `remove(path)` only when `currentPath !== path`; swallow
 
 Before upload, select `repaired_path, model3d_path` from `analyses`, filter by both `id` and authenticated `user_id`, and require `.maybeSingle()` to return a row. Upload with `upsert: true`. Update the correct typed column and use `.select("id").single()` so zero matched rows fail. Map read/update failures to `save_failed` and upload failures to `upload_failed`.
 
-- [ ] **Step 5: Add a source-level owner-policy invariant**
+- [ ] **Step 5: Add a behavioral owner-policy integration test**
 
-In `artifactAttachment.test.mjs`, read `../supabase/migrations/2026-08-17-storage-update.sql` and assert it contains `for update`, both `using` and `with check`, the `analysis-images` bucket restriction, and `(storage.foldername(name))[1] = auth.uid()::text` twice. This is a repository invariant, not a claim that live RLS behavior was integration-tested; live owner/non-owner replacement is recorded separately when the configured project is reachable.
+Create `storagePolicy.integration.test.mjs` using two independent Supabase clients and environment-provided owner/non-owner credentials. The owner uploads an object under `{owner_id}/...`, replaces it with `upsert: true`, downloads it, and asserts the second body is present. The non-owner then attempts to replace that exact owner path and must receive a Storage error. Always let the owner remove the temporary object in `finally`.
+
+Require `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_TEST_OWNER_EMAIL`, `SUPABASE_TEST_OWNER_PASSWORD`, `SUPABASE_TEST_OTHER_EMAIL`, and `SUPABASE_TEST_OTHER_PASSWORD`. Mark this one integration test skipped when any are absent, with a precise reason; never hardcode credentials. Default `npm test` therefore reports the missing external proof honestly instead of replacing it with a source-text assertion.
 
 - [ ] **Step 6: Run tests and static gates**
 
@@ -210,7 +213,7 @@ Expected: all pass.
 - [ ] **Step 7: Commit the unit**
 
 ```bash
-git add web/lib/supabase/artifactAttachment.mts web/lib/supabase/queries.ts web/tests/artifactAttachment.test.mjs
+git add web/lib/supabase/artifactAttachment.mts web/lib/supabase/queries.ts web/tests/artifactAttachment.test.mjs web/tests/storagePolicy.integration.test.mjs
 git commit -m "fix(web): verify generated artifact attachment"
 ```
 
