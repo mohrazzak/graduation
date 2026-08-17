@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from typing import Literal
@@ -11,6 +12,8 @@ from PIL import Image
 from jobs.repair_errors import RepairUnavailable
 from jobs.repair_gemini import generate_gemini
 from predict.tiers import TierCode
+
+logger = logging.getLogger(__name__)
 
 RepairBackend = Literal["auto", "local-controlnet", "gemini"]
 
@@ -40,7 +43,8 @@ def generate_with(
         return gemini()
     try:
         return local()
-    except RepairUnavailable:
+    except RepairUnavailable as exc:
+        logger.warning("local ControlNet unavailable; falling back to Gemini: %s", exc.reason)
         return gemini()
 
 
