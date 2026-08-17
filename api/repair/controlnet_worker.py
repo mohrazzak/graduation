@@ -7,11 +7,15 @@ the base FastAPI environment cannot initialize either heavyweight runtime.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import importlib
 import json
+import os
+import stat
 import sys
 import warnings
 from collections.abc import Callable, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -35,6 +39,7 @@ _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_PROMPT_CHARS = 4_000
 _SEED_LIMIT = 2**31
 _PROBE_PACKAGES = ("diffusers", "accelerate", "transformers", "safetensors", "cv2")
+_GPU_LOCK_PATH = Path("/tmp") / f"damagescale-controlnet-{os.geteuid()}.lock"
 
 GeneratorFactory = Callable[[int], Any]
 PipelineLoader = Callable[..., tuple[Any, GeneratorFactory]]
@@ -60,6 +65,36 @@ class WorkerRequest:
 
 def _fail(reason: str = "local_generation_failed") -> WorkerError:
     return WorkerError(reason)
+
+
+@contextmanager
+def _gpu_lock(path: Path = _GPU_LOCK_PATH):  # noqa: ANN202 - contextmanager iterator
+    """Serialize model load/inference across Linux processes for this service user."""
+    descriptor = -1
+    try:
+        flags = os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW
+        descriptor = os.open(path, flags, 0o600)
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.geteuid()
+            or metadata.st_nlink != 1
+        ):
+            raise OSError("unsafe GPU lock file")
+        os.fchmod(descriptor, 0o600)
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+    except (OSError, ValueError) as exc:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise _fail() from exc
+
+    try:
+        yield
+    finally:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
 
 
 def _owned_path(
@@ -145,14 +180,14 @@ def _load_png(path: Path, mode: str) -> Image.Image:
 def _probe_runtime() -> None:
     try:
         import torch
-    except (ImportError, OSError) as exc:
+    except (ImportError, OSError, RuntimeError) as exc:
         raise _fail("local_dependency_missing") from exc
     if not torch.cuda.is_available():
         raise _fail("local_gpu_unavailable")
     try:
         for package in _PROBE_PACKAGES:
             importlib.import_module(package)
-    except (ImportError, OSError) as exc:
+    except (ImportError, OSError, RuntimeError) as exc:
         raise _fail("local_dependency_missing") from exc
 
 
@@ -214,45 +249,48 @@ def run_request(request_path: Path, *, loader: PipelineLoader | None = None) -> 
     except (OSError, RuntimeError, ValueError) as exc:
         raise _fail() from exc
 
-    if loader is None:
-        _probe_runtime()
-        loader = _load_pipeline
-    try:
-        pipeline, make_generator = loader(
-            controlnet_model_id=CONTROLNET_MODEL_ID,
-            controlnet_revision=CONTROLNET_REVISION,
-            inpaint_model_id=INPAINT_MODEL_ID,
-            inpaint_revision=INPAINT_REVISION,
-        )
-    except WorkerError:
-        raise
-    except Exception as exc:  # noqa: BLE001 - model hub failures become one bounded reason
-        raise _fail("local_model_unavailable") from exc
-    if getattr(pipeline, "safety_checker", None) is None:
-        raise _fail("local_model_unavailable")
+    # flock waits are intentionally inside the parent subprocess deadline. The
+    # lock covers both weight loading and inference, the GPU-heavy region.
+    with _gpu_lock():
+        if loader is None:
+            _probe_runtime()
+            loader = _load_pipeline
+        try:
+            pipeline, make_generator = loader(
+                controlnet_model_id=CONTROLNET_MODEL_ID,
+                controlnet_revision=CONTROLNET_REVISION,
+                inpaint_model_id=INPAINT_MODEL_ID,
+                inpaint_revision=INPAINT_REVISION,
+            )
+        except WorkerError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - model hub failures are bounded
+            raise _fail("local_model_unavailable") from exc
+        if getattr(pipeline, "safety_checker", None) is None:
+            raise _fail("local_model_unavailable")
 
-    try:
-        pipeline.enable_model_cpu_offload()
-        result = pipeline(
-            prompt=request.prompt,
-            negative_prompt=_NEGATIVE_PROMPT,
-            image=init_image,
-            mask_image=inpaint_mask,
-            control_image=control_image,
-            height=_TARGET_SIZE[1],
-            width=_TARGET_SIZE[0],
-            num_inference_steps=30,
-            guidance_scale=9.5,
-            controlnet_conditioning_scale=0.5,
-            generator=make_generator(request.seed),
-        )
-        generated = _safe_image(result)
-        repaired = composite_generated(original, generated, inpaint_mask)
-        repaired.save(request.output_path, format="PNG")
-    except WorkerError:
-        raise
-    except Exception as exc:  # noqa: BLE001 - pipeline diagnostics stay inside this process
-        raise _fail() from exc
+        try:
+            pipeline.enable_model_cpu_offload()
+            result = pipeline(
+                prompt=request.prompt,
+                negative_prompt=_NEGATIVE_PROMPT,
+                image=init_image,
+                mask_image=inpaint_mask,
+                control_image=control_image,
+                height=_TARGET_SIZE[1],
+                width=_TARGET_SIZE[0],
+                num_inference_steps=30,
+                guidance_scale=9.5,
+                controlnet_conditioning_scale=0.5,
+                generator=make_generator(request.seed),
+            )
+            generated = _safe_image(result)
+            repaired = composite_generated(original, generated, inpaint_mask)
+            repaired.save(request.output_path, format="PNG")
+        except WorkerError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - pipeline diagnostics stay isolated
+            raise _fail() from exc
     return request.output_path
 
 

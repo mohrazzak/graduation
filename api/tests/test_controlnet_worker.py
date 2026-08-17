@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
+import os
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +16,15 @@ import pytest
 from PIL import Image
 
 from repair.controlnet_worker import WorkerError, main, run_request
+
+
+def _hold_gpu_lock(lock_path: str, acquired: object, release: object) -> None:
+    """Child-process target used to prove the lock coordinates separate workers."""
+    from repair.controlnet_worker import _gpu_lock
+
+    with _gpu_lock(Path(lock_path)):
+        acquired.set()
+        release.wait(5)
 
 
 class FakeGenerator:
@@ -90,6 +102,54 @@ def test_module_import_does_not_import_torch_or_diffusers() -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_gpu_lock_serializes_processes_and_uses_owner_only_permissions(
+    tmp_path: Path,
+) -> None:
+    """Two worker processes must never hold the GPU/model region concurrently."""
+    import repair.controlnet_worker as worker
+
+    assert hasattr(worker, "_gpu_lock")
+    lock_path = tmp_path / "gpu.lock"
+    context = multiprocessing.get_context("fork")
+    first_acquired = context.Event()
+    release_first = context.Event()
+    second_acquired = context.Event()
+    release_second = context.Event()
+    release_second.set()
+    first = context.Process(
+        target=_hold_gpu_lock,
+        args=(str(lock_path), first_acquired, release_first),
+    )
+    second = context.Process(
+        target=_hold_gpu_lock,
+        args=(str(lock_path), second_acquired, release_second),
+    )
+    try:
+        first.start()
+        assert first_acquired.wait(2), "first worker never acquired the GPU lock"
+        metadata = lock_path.stat()
+        assert metadata.st_uid == os.geteuid()
+        assert stat.S_IMODE(metadata.st_mode) == 0o600
+
+        second.start()
+        assert not second_acquired.wait(0.25), "workers overlapped inside the GPU lock"
+        release_first.set()
+        assert second_acquired.wait(2), "second worker did not acquire after release"
+    finally:
+        release_first.set()
+        release_second.set()
+        first.join(2)
+        second.join(2)
+        if first.is_alive():
+            first.terminate()
+            first.join(2)
+        if second.is_alive():
+            second.terminate()
+            second.join(2)
+    assert first.exitcode == 0
+    assert second.exitcode == 0
 
 
 def test_cli_request_prepares_generation_and_writes_composited_png(tmp_path: Path) -> None:

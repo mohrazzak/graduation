@@ -1,5 +1,6 @@
 """Provider selection keeps local ControlNet optional and Gemini compatible."""
 
+import builtins
 import io
 import json
 import struct
@@ -10,8 +11,14 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from jobs import repair_providers
 from jobs.local_controlnet import generate_local
-from jobs.repair_providers import RepairUnavailable, generate_with, parse_backend
+from jobs.repair_providers import (
+    RepairUnavailable,
+    generate_repaired,
+    generate_with,
+    parse_backend,
+)
 
 PNG = b"\x89PNG\r\n\x1a\nprovider-test"
 
@@ -141,3 +148,38 @@ def test_parse_backend_rejects_invalid_configuration() -> None:
     with pytest.raises(RepairUnavailable, match="invalid_repair_backend") as error:
         parse_backend("controlnet")
     assert error.value.reason == "invalid_repair_backend"
+
+
+def test_forced_local_maps_an_import_time_runtime_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A broken optional binary dependency cannot escape as a raw RuntimeError."""
+    monkeypatch.setenv("REPAIR_BACKEND", "local-controlnet")
+    real_import = builtins.__import__
+
+    def failing_import(name: str, *args: object, **kwargs: object):
+        if name == "jobs.local_controlnet":
+            raise RuntimeError("binary extension could not initialize")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", failing_import)
+    with pytest.raises(RepairUnavailable) as error:
+        generate_repaired(_jpeg(), Image.new("L", (7, 5)), "GC", "repair")
+    assert error.value.reason == "local_dependency_missing"
+
+
+def test_auto_falls_back_after_an_import_time_runtime_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Auto mode treats a broken optional local import as unavailable."""
+    monkeypatch.setenv("REPAIR_BACKEND", "auto")
+    monkeypatch.setattr(repair_providers, "generate_gemini", lambda *_args: PNG)
+    real_import = builtins.__import__
+
+    def failing_import(name: str, *args: object, **kwargs: object):
+        if name == "jobs.local_controlnet":
+            raise RuntimeError("binary extension could not initialize")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", failing_import)
+    assert generate_repaired(_jpeg(), Image.new("L", (7, 5)), "PC", "repair") == PNG

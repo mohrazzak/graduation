@@ -30,6 +30,15 @@ _MIN_TIMEOUT_SECONDS = 30
 _MAX_TIMEOUT_SECONDS = 3600
 _MAX_OUTPUT_BYTES = 25 * 1024 * 1024
 _MAX_LOGGED_STDERR_CHARS = 2048
+_MAX_WORKER_REASON_BYTES = 128
+_WORKER_REASONS = frozenset(
+    (
+        "local_dependency_missing",
+        "local_gpu_unavailable",
+        "local_model_unavailable",
+        "local_generation_failed",
+    )
+)
 
 logger = logging.getLogger(__name__)
 Runner = Callable[..., subprocess.CompletedProcess[bytes]]
@@ -37,7 +46,13 @@ _successful_probe = False
 
 
 def _worker_python() -> str:
-    return os.environ.get("LOCAL_REPAIR_PYTHON", str(_DEFAULT_PYTHON))
+    raw = os.environ.get("LOCAL_REPAIR_PYTHON")
+    if raw is None or not raw.strip():
+        return str(_DEFAULT_PYTHON)
+    path = Path(raw.strip())
+    if not path.is_absolute():
+        raise RepairUnavailable("local_dependency_missing")
+    return str(path)
 
 
 def _timeout_seconds() -> int:
@@ -59,6 +74,24 @@ def _log_worker_stderr(stderr: bytes | str | None) -> None:
     if isinstance(stderr, bytes):
         stderr = stderr.decode("utf-8", errors="replace")
     logger.warning("local ControlNet worker failed: %s", stderr[:_MAX_LOGGED_STDERR_CHARS])
+
+
+def _worker_failure_reason(stderr: bytes | str | None) -> str:
+    """Return only one exact, bounded worker reason from the public whitelist."""
+    if stderr is None:
+        return "local_generation_failed"
+    encoded = stderr if isinstance(stderr, bytes) else stderr.encode("utf-8", errors="replace")
+    if len(encoded) > _MAX_WORKER_REASON_BYTES:
+        return "local_generation_failed"
+    try:
+        candidate = encoded.decode("ascii")
+    except UnicodeDecodeError:
+        return "local_generation_failed"
+    if candidate.endswith("\r\n"):
+        candidate = candidate[:-2]
+    elif candidate.endswith("\n"):
+        candidate = candidate[:-1]
+    return candidate if candidate in _WORKER_REASONS else "local_generation_failed"
 
 
 def _save_normalized_png(image: Image.Image, path: Path, mode: str) -> None:
@@ -95,6 +128,9 @@ def generate_local(
 ) -> bytes:
     """Generate through the isolated worker and accept only a valid PNG result."""
     run = runner or subprocess.run
+    worker_python = python or _worker_python()
+    if not Path(worker_python).is_absolute():
+        raise RepairUnavailable("local_dependency_missing")
     with TemporaryDirectory(prefix="controlnet-") as directory:
         work_dir = Path(directory)
         input_path = work_dir / "input.png"
@@ -108,21 +144,24 @@ def generate_local(
         except (Image.DecompressionBombError, OSError, ValueError) as exc:
             raise RepairUnavailable("local_generation_failed") from exc
 
-        request_path.write_text(
-            json.dumps(
-                {
-                    "input_path": str(input_path.resolve()),
-                    "mask_path": str(mask_path.resolve()),
-                    "output_path": str(output_path.resolve()),
-                    "tier": tier,
-                    "prompt": prompt,
-                    "seed": generation_seed(image_bytes, tier, prompt),
-                }
-            ),
-            encoding="utf-8",
-        )
+        try:
+            request_path.write_text(
+                json.dumps(
+                    {
+                        "input_path": str(input_path.resolve()),
+                        "mask_path": str(mask_path.resolve()),
+                        "output_path": str(output_path.resolve()),
+                        "tier": tier,
+                        "prompt": prompt,
+                        "seed": generation_seed(image_bytes, tier, prompt),
+                    }
+                ),
+                encoding="utf-8",
+            )
+        except (OSError, RuntimeError, UnicodeError, ValueError) as exc:
+            raise RepairUnavailable("local_generation_failed") from exc
         command = [
-            python or _worker_python(),
+            worker_python,
             "-m",
             "repair.controlnet_worker",
             "--request",
@@ -143,7 +182,7 @@ def generate_local(
             raise RepairUnavailable("local_generation_failed") from exc
         if completed.returncode != 0:
             _log_worker_stderr(completed.stderr)
-            raise RepairUnavailable("local_generation_failed")
+            raise RepairUnavailable(_worker_failure_reason(completed.stderr))
         return _validated_output(output_path)
 
 
@@ -154,13 +193,14 @@ def local_available(*, runner: Runner | None = None) -> bool:
         return True
     run = runner or subprocess.run
     try:
+        worker_python = _worker_python()
         completed = run(
-            [_worker_python(), "-m", "repair.controlnet_worker", "--probe"],
+            [worker_python, "-m", "repair.controlnet_worker", "--probe"],
             shell=False,
             timeout=_PROBE_TIMEOUT_SECONDS,
             capture_output=True,
         )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+    except (RepairUnavailable, FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return False
     if completed.returncode == 0:
         _successful_probe = True

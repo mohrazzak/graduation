@@ -165,6 +165,105 @@ def test_missing_worker_interpreter_has_a_stable_reason() -> None:
     assert error.value.reason == "local_dependency_missing"
 
 
+@pytest.mark.parametrize(
+    ("stderr", "expected"),
+    [
+        (b"local_dependency_missing\n", "local_dependency_missing"),
+        (b"local_gpu_unavailable\n", "local_gpu_unavailable"),
+        (b"local_model_unavailable\n", "local_model_unavailable"),
+        (b"local_generation_failed\n", "local_generation_failed"),
+        (b"unknown_worker_reason\n", "local_generation_failed"),
+        (b"warning: details\nlocal_gpu_unavailable\n", "local_generation_failed"),
+        (b"local_gpu_unavailable" + b"x" * 300, "local_generation_failed"),
+    ],
+)
+def test_nonzero_worker_exit_exposes_only_a_whitelisted_reason(
+    stderr: bytes, expected: str
+) -> None:
+    """Worker diagnostics cannot become an arbitrary client-visible error key."""
+
+    def failed(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(command, 1, b"", stderr)
+
+    with pytest.raises(RepairUnavailable) as error:
+        generate_local(
+            _image_bytes(), Image.new("L", (7, 5)), "GC", "repair", runner=failed
+        )
+    assert error.value.reason == expected
+
+
+def test_blank_worker_python_uses_the_absolute_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty Compose variable has the same meaning as omitting the override."""
+    monkeypatch.setenv("LOCAL_REPAIR_PYTHON", "   ")
+    seen: dict[str, Any] = {}
+
+    generate_local(
+        _image_bytes(),
+        Image.new("L", (7, 5)),
+        "GC",
+        "repair",
+        runner=_successful_runner(seen, _image_bytes("PNG")),
+    )
+
+    executable = Path(seen["command"][0])
+    assert executable.is_absolute()
+    assert executable.parts[-3:] == (".venv-repair", "bin", "python")
+
+
+def test_relative_worker_python_fails_before_forced_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A relative interpreter must not depend on FastAPI's current directory."""
+    monkeypatch.setenv("LOCAL_REPAIR_PYTHON", ".venv-repair/bin/python")
+
+    with pytest.raises(RepairUnavailable) as error:
+        generate_local(
+            _image_bytes(),
+            Image.new("L", (7, 5)),
+            "GC",
+            "repair",
+            runner=lambda *args, **kwargs: pytest.fail("runner must not start"),
+        )
+    assert error.value.reason == "local_dependency_missing"
+
+
+def test_relative_worker_python_makes_the_probe_predictably_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Auto-mode probing treats invalid interpreter configuration as unready."""
+    import jobs.local_controlnet as local_controlnet
+
+    monkeypatch.setattr(local_controlnet, "_successful_probe", False)
+    monkeypatch.setenv("LOCAL_REPAIR_PYTHON", "repair-python")
+
+    assert local_available(
+        runner=lambda *args, **kwargs: pytest.fail("runner must not start")
+    ) is False
+
+
+def test_request_write_failure_has_a_stable_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A temporary-file write failure must not escape the job worker thread."""
+
+    def fail_write(*args: Any, **kwargs: Any) -> int:
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(Path, "write_text", fail_write)
+    with pytest.raises(RepairUnavailable) as error:
+        generate_local(_image_bytes(), Image.new("L", (7, 5)), "GC", "repair")
+    assert error.value.reason == "local_generation_failed"
+
+
+def test_unencodable_prompt_has_a_stable_reason() -> None:
+    """Unicode encoding failures in seed/request preparation remain bounded."""
+    with pytest.raises(RepairUnavailable) as error:
+        generate_local(_image_bytes(), Image.new("L", (7, 5)), "GC", "bad\ud800prompt")
+    assert error.value.reason == "local_generation_failed"
+
+
 def test_unsafe_source_image_has_a_stable_reason() -> None:
     """Pillow's decompression guard must not escape the worker boundary."""
     with pytest.raises(RepairUnavailable) as error:

@@ -59,14 +59,14 @@ def generate_repaired(
     def generate_local() -> bytes:
         try:
             from jobs.local_controlnet import generate_local as local_generator
-        except ImportError as exc:
+        except (ImportError, RuntimeError) as exc:
             raise RepairUnavailable("local_dependency_missing") from exc
         return local_generator(image_bytes, building_mask, tier, prompt)
 
     def local_available() -> bool:
         try:
             from jobs.local_controlnet import local_available as local_probe
-        except ImportError:
+        except (ImportError, RuntimeError):
             return False
         return local_probe()
 
