@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import subprocess
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -71,12 +72,14 @@ def _validated_output(output_path: Path) -> bytes:
         if output_path.stat().st_size > _MAX_OUTPUT_BYTES:
             raise ValueError("output too large")
         output = output_path.read_bytes()
-        with Image.open(io.BytesIO(output)) as candidate:
-            candidate.verify()
-        with Image.open(io.BytesIO(output)) as candidate:
-            if candidate.format != "PNG" or min(candidate.size) <= 0:
-                raise ValueError("output is not a non-empty PNG")
-    except (Image.DecompressionBombError, OSError, ValueError) as exc:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(output)) as candidate:
+                candidate.verify()
+            with Image.open(io.BytesIO(output)) as candidate:
+                if candidate.format != "PNG" or min(candidate.size) <= 0:
+                    raise ValueError("output is not a non-empty PNG")
+    except Exception as exc:  # noqa: BLE001 - malformed output must never escape this boundary
         raise RepairUnavailable("local_generation_failed") from exc
     return output
 

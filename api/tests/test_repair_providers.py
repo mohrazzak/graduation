@@ -1,10 +1,49 @@
 """Provider selection keeps local ControlNet optional and Gemini compatible."""
 
-import pytest
+import io
+import json
+import struct
+import subprocess
+import zlib
+from pathlib import Path
 
+import pytest
+from PIL import Image
+
+from jobs.local_controlnet import generate_local
 from jobs.repair_providers import RepairUnavailable, generate_with, parse_backend
 
 PNG = b"\x89PNG\r\n\x1a\nprovider-test"
+
+
+def _jpeg() -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (7, 5), (25, 50, 75)).save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+
+def _incomplete_png() -> bytes:
+    payload = struct.pack(">IIBBBBB", 7, 5, 8, 2, 0, 0, 0)
+    header = b"IHDR" + payload
+    end = b"IEND"
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I", len(payload))
+        + header
+        + struct.pack(">I", zlib.crc32(header) & 0xFFFFFFFF)
+        + struct.pack(">I", 0)
+        + end
+        + struct.pack(">I", zlib.crc32(end) & 0xFFFFFFFF)
+    )
+
+
+def _malformed_local_result() -> bytes:
+    def runner(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        request = json.loads(Path(command[-1]).read_text())
+        Path(request["output_path"]).write_bytes(_incomplete_png())
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    return generate_local(_jpeg(), Image.new("L", (7, 5)), "GC", "repair", runner=runner)
 
 
 def test_auto_uses_local_first() -> None:
@@ -33,6 +72,17 @@ def test_auto_falls_back_to_gemini_after_local_failure() -> None:
     )
     assert result == PNG
     assert calls == ["gemini"]
+
+
+def test_auto_falls_back_after_malformed_local_worker_output() -> None:
+    """Malformed worker bytes are normalized before auto mode selects Gemini."""
+    result = generate_with(
+        "auto",
+        local=_malformed_local_result,
+        gemini=lambda: PNG,
+        local_ready=lambda: True,
+    )
+    assert result == PNG
 
 
 def test_forced_local_never_falls_back() -> None:

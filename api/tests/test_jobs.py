@@ -1,13 +1,19 @@
 """The job API: creation, gating, polling, artifacts, and honest failure."""
 
 import io
+import json
+import struct
+import subprocess
 import time
+import zlib
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from jobs import repair
+from jobs.local_controlnet import generate_local
 from main import create_app
 
 
@@ -29,6 +35,36 @@ def _jpeg() -> bytes:
 
 def _files():
     return {"file": ("b.jpg", _jpeg(), "image/jpeg")}
+
+
+def _incomplete_png() -> bytes:
+    payload = struct.pack(">IIBBBBB", 7, 5, 8, 2, 0, 0, 0)
+    header = b"IHDR" + payload
+    end = b"IEND"
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I", len(payload))
+        + header
+        + struct.pack(">I", zlib.crc32(header) & 0xFFFFFFFF)
+        + struct.pack(">I", 0)
+        + end
+        + struct.pack(">I", zlib.crc32(end) & 0xFFFFFFFF)
+    )
+
+
+def _malformed_local_generation(**kwargs: object) -> bytes:
+    def runner(command: list[str], **run_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        request = json.loads(Path(command[-1]).read_text())
+        Path(request["output_path"]).write_bytes(_incomplete_png())
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    return generate_local(
+        kwargs["image_bytes"],
+        kwargs["building_mask"],
+        kwargs["tier"],
+        kwargs["prompt"],
+        runner=runner,
+    )
 
 
 def _wait(client: TestClient, job_id: str, timeout: float = 120.0) -> dict:
@@ -103,6 +139,21 @@ def test_repair_reports_a_named_reason_when_generation_cannot_run(
     body = _wait(client, job_id)
     assert body["status"] == "error"
     assert body["detail"] == "no_api_key"
+
+
+def test_repair_reports_named_local_failure_for_malformed_worker_output(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A local validation error must not be downgraded to an unexpected job crash."""
+    monkeypatch.setattr(repair, "generate_repaired", _malformed_local_generation)
+    job_id = client.post(
+        "/jobs/repair", files=_files(), data={"tier": "GC"}
+    ).json()["job_id"]
+
+    body = _wait(client, job_id)
+
+    assert body["status"] == "error"
+    assert body["detail"] == "local_generation_failed"
 
 
 def test_model3d_without_a_key_fails_with_a_reason(

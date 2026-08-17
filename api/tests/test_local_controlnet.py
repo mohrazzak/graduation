@@ -42,6 +42,47 @@ def _decompression_bomb_header() -> bytes:
     )
 
 
+def _incomplete_png() -> bytes:
+    payload = struct.pack(">IIBBBBB", 7, 5, 8, 2, 0, 0, 0)
+    header = b"IHDR" + payload
+    end = b"IEND"
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I", len(payload))
+        + header
+        + struct.pack(">I", zlib.crc32(header) & 0xFFFFFFFF)
+        + struct.pack(">I", 0)
+        + end
+        + struct.pack(">I", zlib.crc32(end) & 0xFFFFFFFF)
+    )
+
+
+def _compressible_large_png() -> bytes:
+    width = height = 10_000
+    payload = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)
+    header = b"IHDR" + payload
+    compressor = zlib.compressobj()
+    scanline = b"\x00" * (width + 1)
+    compressed = bytearray()
+    for _ in range(height):
+        compressed.extend(compressor.compress(scanline))
+    compressed.extend(compressor.flush())
+    data = b"IDAT" + bytes(compressed)
+    end = b"IEND"
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + struct.pack(">I", len(payload))
+        + header
+        + struct.pack(">I", zlib.crc32(header) & 0xFFFFFFFF)
+        + struct.pack(">I", len(compressed))
+        + data
+        + struct.pack(">I", zlib.crc32(data) & 0xFFFFFFFF)
+        + struct.pack(">I", 0)
+        + end
+        + struct.pack(">I", zlib.crc32(end) & 0xFFFFFFFF)
+    )
+
+
 def _successful_runner(
     seen: dict[str, Any], output: bytes
 ) -> Runner:
@@ -146,6 +187,7 @@ def test_unsafe_source_image_has_a_stable_reason() -> None:
         ("jpeg output", 0, _image_bytes("JPEG")),
         ("oversized output", 0, b"x" * (25 * 1024 * 1024 + 1)),
         ("decompression bomb output", 0, _decompression_bomb_header()),
+        ("incomplete png output", 0, _incomplete_png()),
     ],
 )
 def test_invalid_worker_output_has_a_stable_reason(
@@ -161,6 +203,22 @@ def test_invalid_worker_output_has_a_stable_reason(
 
     with pytest.raises(RepairUnavailable) as error:
         generate_local(_image_bytes(), Image.new("L", (7, 5)), "NC", description, runner=run)
+    assert error.value.reason == "local_generation_failed"
+
+
+def test_compressible_large_png_output_has_a_stable_reason() -> None:
+    """A small PNG file cannot bypass the output pixel-safety limit."""
+    output = _compressible_large_png()
+    assert len(output) < 1024 * 1024
+
+    with pytest.raises(RepairUnavailable) as error:
+        generate_local(
+            _image_bytes(),
+            Image.new("L", (7, 5)),
+            "NC",
+            "repair",
+            runner=_successful_runner({}, output),
+        )
     assert error.value.reason == "local_generation_failed"
 
 
