@@ -14,6 +14,7 @@ from PIL import Image
 
 from jobs import repair
 from jobs.local_controlnet import generate_local
+from jobs.repair_errors import RepairUnavailable
 from main import create_app
 
 
@@ -154,6 +155,39 @@ def test_repair_reports_named_local_failure_for_malformed_worker_output(
 
     assert body["status"] == "error"
     assert body["detail"] == "local_generation_failed"
+
+
+@pytest.mark.parametrize(
+    "reason",
+    (
+        "local_dependency_missing",
+        "local_gpu_unavailable",
+        "local_model_unavailable",
+        "local_timed_out",
+        "local_generation_failed",
+    ),
+)
+def test_local_controlnet_failure_keeps_preparation_artifacts_and_reason(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, reason: str
+) -> None:
+    """Forced local failures keep the useful local artifacts and their stable key."""
+    monkeypatch.setenv("REPAIR_BACKEND", "local-controlnet")
+
+    def unavailable(*_args: object, **_kwargs: object) -> bytes:
+        raise RepairUnavailable(reason)
+
+    monkeypatch.setattr("jobs.local_controlnet.generate_local", unavailable)
+    job_id = client.post(
+        "/jobs/repair", files=_files(), data={"tier": "GC"}
+    ).json()["job_id"]
+
+    body = _wait(client, job_id)
+
+    assert body["status"] == "error"
+    assert body["detail"] == reason
+    assert "mask" in body["artifacts"]
+    assert "edges" in body["artifacts"]
+    assert "repaired" not in body["artifacts"]
 
 
 def test_model3d_without_a_key_fails_with_a_reason(

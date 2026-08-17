@@ -1,14 +1,14 @@
 """The 2D restoration pipeline: mask -> edges -> generate -> compose.
 
 Three of the four stages run locally for free and produce the artifacts the
-interactive canvas shows. Only `generating` calls Gemini, and it is ONE long
-opaque step: the API reports no progress, so the UI shows one honest indefinite
-step rather than fabricated sub-progress.
+interactive canvas shows. `generating` uses the configured repair provider,
+which can be the mask-conditioned local ControlNet worker or Gemini. It is one
+long opaque step: the API reports no progress, so the UI shows one honest
+indefinite step rather than fabricated sub-progress.
 
-The tier decides how much latitude the instruction grants. Raed's rule for a
-total collapse — "use a full mask" — has no literal form on an instruction-editing
-backend, which accepts no mask at all; it maps onto maximum reconstruction
-latitude in the prompt. A mask-conditioned backend would express it literally.
+The tier decides how much latitude the instruction grants. The local provider
+receives the building mask directly; Gemini receives the matching prompt-only
+guidance.
 """
 
 from __future__ import annotations
