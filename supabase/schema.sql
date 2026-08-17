@@ -54,5 +54,11 @@ create policy "own files write" on storage.objects for insert
   with check (bucket_id = 'analysis-images' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "own files delete" on storage.objects for delete
   using (bucket_id = 'analysis-images' and (storage.foldername(name))[1] = auth.uid()::text);
+-- Update is required because re-running a restoration or reconstruction writes
+-- the SAME deterministic path again; without it the replace fails with an RLS
+-- error and the stored artifact silently stays at the previous result.
+create policy "own files update" on storage.objects for update
+  using (bucket_id = 'analysis-images' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'analysis-images' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- Frontend reads images via createSignedUrl (bucket is private).
