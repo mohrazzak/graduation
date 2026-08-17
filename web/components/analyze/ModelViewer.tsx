@@ -18,6 +18,10 @@ export function ModelViewer({ src, downloadName }: ModelViewerProps) {
   const reduced = useReducedMotion() ?? false;
   const [ready, setReady] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
+  const viewerRef = useRef<HTMLElement | null>(null);
+  // A string, so effects keyed on it are stable by VALUE — unlike the
+  // translator function, whose identity churn is what broke this before.
+  const alt = t("model3d.viewerAlt");
 
   // Loaded on demand rather than in the bundle: nobody who never reconstructs a
   // building should pay for the viewer.
@@ -31,24 +35,45 @@ export function ModelViewer({ src, downloadName }: ModelViewerProps) {
     };
   }, []);
 
-  // The custom element is not a React component, so its attributes are set
-  // imperatively. auto-rotate is gated on reduced motion like every animation.
+  // WHY the element is created ONCE and then mutated, never re-created:
+  // <model-viewer> starts fetching and parsing the GLB the moment it is
+  // attached. Replacing the node on a re-render restarts that work from
+  // scratch, so a large model can loop forever and never fire `load` — which is
+  // exactly what happened when this effect also depended on the translator
+  // function. Create on mount; update attributes in place afterwards.
   useEffect(() => {
-    if (!ready || hostRef.current === null) return;
+    if (!ready || hostRef.current === null || viewerRef.current !== null) return;
     const el = document.createElement("model-viewer");
-    el.setAttribute("src", src);
     el.setAttribute("camera-controls", "");
     el.setAttribute("touch-action", "pan-y");
     el.setAttribute("shadow-intensity", "1");
     el.setAttribute("exposure", "1");
-    el.setAttribute("alt", t("model3d.viewerAlt"));
     el.setAttribute("style", "width:100%;height:100%;background-color:#0C0C0E;");
-    if (!reduced) {
+    hostRef.current.replaceChildren(el);
+    viewerRef.current = el;
+  }, [ready]);
+
+  // Source and label changes update the element in place rather than
+  // rebuilding the viewer.
+  useEffect(() => {
+    viewerRef.current?.setAttribute("src", src);
+  }, [src, ready]);
+
+  useEffect(() => {
+    viewerRef.current?.setAttribute("alt", alt);
+  }, [alt, ready]);
+
+  // auto-rotate is an animation, so it follows the reduced-motion preference.
+  useEffect(() => {
+    const el = viewerRef.current;
+    if (el === null) return;
+    if (reduced) {
+      el.removeAttribute("auto-rotate");
+    } else {
       el.setAttribute("auto-rotate", "");
       el.setAttribute("auto-rotate-delay", "600");
     }
-    hostRef.current.replaceChildren(el);
-  }, [ready, src, reduced, t]);
+  }, [reduced, ready]);
 
   return (
     <div>

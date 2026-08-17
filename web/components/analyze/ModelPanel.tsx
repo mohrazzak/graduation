@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { CornerTicks } from "@/components/ui/CornerTicks";
+import { model3dFixtureFor } from "@/lib/fixtures";
 import { artifactUrl, startModel3d } from "@/lib/jobs";
 import { ModelViewer } from "./ModelViewer";
 import { StageProgress } from "./StageProgress";
@@ -35,6 +36,11 @@ export function ModelPanel({ file, repairedJobId, primary }: ModelPanelProps) {
   }
 
   const model = state?.artifacts.includes("model") ?? false;
+  // When the service is simply out of credit, fall back to a pre-generated
+  // model of THIS photo if one exists — clearly labelled, never passed off
+  // as live output.
+  const fixture =
+    state?.status === "error" ? model3dFixtureFor(file.name, state.detail) : null;
 
   return (
     <section className="relative overflow-hidden rounded border border-line bg-surface">
@@ -82,6 +88,16 @@ export function ModelPanel({ file, repairedJobId, primary }: ModelPanelProps) {
               <p role="alert" className="text-sm text-hazard">
                 {t(`model3d.errors.${state.detail ?? "server"}`)}
               </p>
+            ) : null}
+            {fixture !== null ? (
+              <div>
+                {/* The label comes FIRST: the viewer below is a stored example,
+                    and the user must know that before they look at it. */}
+                <p className="mb-2 border-s-2 border-hazard ps-3 text-sm text-hazard">
+                  {t("model3d.fixtureNotice")}
+                </p>
+                <ModelViewer src={fixture} downloadName="damagescale-example.glb" />
+              </div>
             ) : null}
           </div>
         ) : null}

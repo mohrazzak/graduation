@@ -345,6 +345,7 @@
       "server": "Reconstruction failed. Try again.",
       "aborted": "Reconstruction was cancelled.",
       "job_expired": "That reconstruction expired. Run it again."
-    }
+    },
+    "fixtureNotice": "Pre-generated example — this is a stored 3D model of this sample photo, produced earlier by the same service. It is not a live result of the run above."
   }
 }
