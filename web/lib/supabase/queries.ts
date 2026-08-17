@@ -163,10 +163,12 @@ export async function deleteAnalysis(analysis: Analysis): Promise<Result<null>> 
     return { data: null, error: "delete_failed" };
   }
 
-  const paths = [analysis.image_path];
-  if (analysis.heatmap_path) {
-    paths.push(analysis.heatmap_path);
-  }
+  const paths = [
+    analysis.image_path,
+    analysis.heatmap_path,
+    analysis.repaired_path,
+    analysis.model3d_path,
+  ].filter((path): path is string => path !== null);
   await removeQuietly(supabase, paths);
   return { data: null, error: null };
 }
@@ -187,12 +189,27 @@ export async function getSignedUrl(path: string): Promise<Result<string>> {
   return { data: data.signedUrl, error: null };
 }
 
-// Attaches a generated 3D model to an existing analysis: uploads the GLB and
-// records its path on the row. Explicit rather than automatic — a GLB is 9-17 MB
-// against a 1 GB bucket, so the user decides which ones are worth keeping.
-export async function attachModel3d(
+/** The pipeline outputs that can be attached to an analysis after the fact. */
+export type GeneratedArtifact = "repaired" | "model3d";
+
+const ARTIFACT_SPEC: Record<
+  GeneratedArtifact,
+  { extension: string; contentType: string }
+> = {
+  repaired: { extension: "_repaired.png", contentType: "image/png" },
+  model3d: { extension: ".glb", contentType: "model/gltf-binary" },
+};
+
+// Attaches a generated output to an existing analysis: uploads it and records
+// its path on the row, so a result survives the job's 30-minute memory TTL and
+// can be reopened from history.
+//
+// upsert: re-running a restoration on the same analysis replaces the stored
+// image rather than failing or orphaning the old one.
+export async function attachArtifact(
   analysisId: string,
-  glb: Blob,
+  kind: GeneratedArtifact,
+  blob: Blob,
 ): Promise<Result<string>> {
   if (!isSupabaseConfigured()) {
     return { data: null, error: "not_configured" };
@@ -204,17 +221,22 @@ export async function attachModel3d(
     return { data: null, error: "not_authenticated" };
   }
 
-  const path = `${userId}/${analysisId}.glb`;
+  const spec = ARTIFACT_SPEC[kind];
+  const path = `${userId}/${analysisId}${spec.extension}`;
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
-    .upload(path, glb, { contentType: "model/gltf-binary", upsert: true });
+    .upload(path, blob, { contentType: spec.contentType, upsert: true });
   if (uploadError) {
     return { data: null, error: "upload_failed" };
   }
 
+  // Named explicitly rather than via a computed key: a computed key widens the
+  // patch to a string index signature and loses postgrest's column checking.
+  const patch =
+    kind === "repaired" ? { repaired_path: path } : { model3d_path: path };
   const { error: updateError } = await supabase
     .from("analyses")
-    .update({ model3d_path: path })
+    .update(patch)
     .eq("id", analysisId);
   if (updateError) {
     // Do not leave a stored object the row cannot reference.
@@ -253,6 +275,8 @@ function toAnalysis(row: AnalysesRow): Analysis | null {
       probabilities: toTierProbabilities(row.probabilities),
       damage_percent: row.damage_percent,
       model_id: row.model_id,
+      repaired_path: row.repaired_path,
+      model3d_path: row.model3d_path,
       created_at: row.created_at,
     };
   } catch {

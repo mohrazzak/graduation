@@ -5,11 +5,12 @@
 // GC gets a warning first: at total collapse the output is a conceptual
 // reconstruction, not a repair plan, and the user should know that before the
 // image appears rather than after.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { CornerTicks } from "@/components/ui/CornerTicks";
 import { artifactUrl, startRepair } from "@/lib/jobs";
+import { attachArtifact } from "@/lib/supabase/queries";
 import { policyFor } from "@/lib/services";
 import { isAlertTier, type TierCode } from "@/lib/tiers";
 import { BeforeAfter } from "./BeforeAfter";
@@ -21,13 +22,21 @@ export interface RepairPanelProps {
   file: File;
   tier: TierCode;
   sourceSrc: string | null;
+  /** Row to attach the restored image to; null until the analysis has saved. */
+  analysisId: string | null;
   /** Told the job id once a restoration finishes, so 3D can reconstruct from it. */
   onRepaired: (jobId: string | null) => void;
 }
 
 const STAGE_KEYS = ["isolating", "edges", "generating", "composing"] as const;
 
-export function RepairPanel({ file, tier, sourceSrc, onRepaired }: RepairPanelProps) {
+export function RepairPanel({
+  file,
+  tier,
+  sourceSrc,
+  analysisId,
+  onRepaired,
+}: RepairPanelProps) {
   const t = useTranslations();
   const policy = policyFor(tier);
   const { jobId, state, running, start } = useJob();
@@ -47,6 +56,20 @@ export function RepairPanel({ file, tier, sourceSrc, onRepaired }: RepairPanelPr
   useEffect(() => {
     if (repaired && jobId !== null) onRepaired(jobId);
   }, [repaired, jobId, onRepaired]);
+
+  // A restored image is kept automatically (spec §10) — unlike a 9-17 MB GLB it
+  // is small, and it is the point of having run the restoration at all. Guarded
+  // so a re-render cannot upload it twice.
+  const attachedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!repaired || jobId === null || analysisId === null) return;
+    if (attachedRef.current === jobId) return;
+    attachedRef.current = jobId;
+    void fetch(artifactUrl(jobId, "repaired"))
+      .then((response) => response.blob())
+      .then((blob) => attachArtifact(analysisId, "repaired", blob))
+      .catch(() => undefined);
+  }, [repaired, jobId, analysisId]);
 
   return (
     <section className="relative overflow-hidden rounded border border-line bg-surface">

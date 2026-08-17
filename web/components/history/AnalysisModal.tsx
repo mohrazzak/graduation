@@ -1,9 +1,14 @@
 "use client";
-// Full assessment detail inside the dialog shell: image with the shared
-// heatmap overlay, scale, confidence bars, date, and a two-step inline delete.
+// The complete saved assessment: the verdict, what to do about it, and every
+// generated output — the restored image and the 3D model — so reopening a
+// history entry shows the same full result as the analyze page did.
 import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
+import { BeforeAfter } from "@/components/analyze/BeforeAfter";
 import { ConfidenceBars } from "@/components/analyze/ConfidenceBars";
+import { DamageGauge } from "@/components/analyze/DamageGauge";
+import { ModelViewer } from "@/components/analyze/ModelViewer";
+import { RecommendationCard } from "@/components/analyze/RecommendationCard";
 import { HeatmapToggle } from "@/components/analyze/HeatmapToggle";
 import { ImageWithHeatmap } from "@/components/analyze/ImageWithHeatmap";
 import { ReportDocument } from "@/components/report/ReportDocument";
@@ -19,6 +24,10 @@ export interface AnalysisModalProps {
   imageUrl: string | null;
   /** Signed heatmap URL, resolved lazily by the opener; null while pending/failed. */
   heatmapUrl: string | null;
+  /** Signed URL of the restored image, when one was generated. */
+  repairedUrl: string | null;
+  /** Signed URL of the kept 3D model, when one was generated. */
+  modelUrl: string | null;
   /** Resolves true on success (the opener closes the modal), false on failure. */
   onDelete: () => Promise<boolean>;
   onClose: () => void;
@@ -31,6 +40,8 @@ export function AnalysisModal({
   analysis,
   imageUrl,
   heatmapUrl,
+  repairedUrl,
+  modelUrl,
   onDelete,
   onClose,
 }: AnalysisModalProps) {
@@ -124,6 +135,46 @@ export function AnalysisModal({
       <div className="mt-4">
         <ConfidenceBars probabilities={analysis.probabilities} />
       </div>
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
+        <DamageGauge value={analysis.damage_percent} tier={tier.code} />
+        <p className="flex items-baseline gap-2 text-xs text-muted">
+          <span className="uppercase tracking-wider">{t("analyze.modelUsed")}</span>
+          <span className="font-mono">{analysis.model_id}</span>
+        </p>
+      </div>
+      <div className="mt-5">
+        <RecommendationCard tier={tier.code} />
+      </div>
+      {/* Generated outputs. Each appears only when that service actually ran,
+          so an entry never implies work it does not have. */}
+      {analysis.repaired_path !== null ? (
+        <div className="mt-5">
+          <p className="mb-2 text-xs uppercase tracking-wider text-muted">
+            {t("repair.beforeAfter")}
+          </p>
+          {repairedUrl !== null && imageUrl !== null ? (
+            <BeforeAfter
+              baseSrc={imageUrl}
+              overlaySrc={repairedUrl}
+              overlayAlt={t("repair.repairedAlt")}
+            />
+          ) : (
+            <p className="text-xs text-muted">{t("history.artifactLoading")}</p>
+          )}
+        </div>
+      ) : null}
+      {analysis.model3d_path !== null ? (
+        <div className="mt-5">
+          <p className="mb-2 text-xs uppercase tracking-wider text-muted">
+            {t("model3d.title")}
+          </p>
+          {modelUrl !== null ? (
+            <ModelViewer src={modelUrl} downloadName={`damagescale-${analysis.id.slice(0, 8)}.glb`} />
+          ) : (
+            <p className="text-xs text-muted">{t("history.artifactLoading")}</p>
+          )}
+        </div>
+      ) : null}
       <div className="mt-6 flex flex-wrap items-center gap-3">
         {analysis.heatmap_path !== null ? (
           <HeatmapToggle

@@ -156,7 +156,12 @@
     "heatmapHide": "Hide heatmap",
     "loadFailed": "History did not load. Check your connection, then retry.",
     "notConfigured": "History is unavailable — Supabase is not configured yet. Add the project URL and anon key to web/.env.local, then retry.",
-    "deleteFailed": "The assessment was not deleted. Check your connection, then retry."
+    "deleteFailed": "The assessment was not deleted. Check your connection, then retry.",
+    "artifactLoading": "Loading the saved output...",
+    "badges": {
+      "repaired": "Restored",
+      "model3d": "3D"
+    }
   },
   "report": {
     "button": "Report",

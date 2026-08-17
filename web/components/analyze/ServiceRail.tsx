@@ -45,6 +45,7 @@ export function ServiceRail({
             file={file}
             tier={tier}
             sourceSrc={sourceSrc}
+            analysisId={analysisId}
             onRepaired={setRepairedJobId}
           />
         ) : (

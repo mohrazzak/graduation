@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { CornerTicks } from "@/components/ui/CornerTicks";
 import { model3dFixtureFor } from "@/lib/fixtures";
-import { attachModel3d } from "@/lib/supabase/queries";
+import { attachArtifact } from "@/lib/supabase/queries";
 import { artifactUrl, startModel3d } from "@/lib/jobs";
 import { ModelViewer } from "./ModelViewer";
 import { StageProgress } from "./StageProgress";
@@ -44,7 +44,11 @@ export function ModelPanel({
     setKeepState("saving");
     try {
       const response = await fetch(artifactUrl(jobId, "model"));
-      const { error } = await attachModel3d(analysisId, await response.blob());
+      const { error } = await attachArtifact(
+        analysisId,
+        "model3d",
+        await response.blob(),
+      );
       setKeepState(error === null ? "kept" : "failed");
     } catch {
       setKeepState("failed");

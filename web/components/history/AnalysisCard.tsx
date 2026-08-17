@@ -45,6 +45,22 @@ export function AnalysisCard({ analysis, imageUrl, onOpen }: AnalysisCardProps) 
         </span>
       )}
       <TierStrip size="md" activeTier={tier.code} className="mt-4" />
+      {/* Which services this assessment actually has stored, so the grid shows
+          at a glance where the full pipeline was run. */}
+      {analysis.repaired_path !== null || analysis.model3d_path !== null ? (
+        <span className="mt-3 flex flex-wrap gap-1.5">
+          {analysis.repaired_path !== null ? (
+            <span className="border border-line px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted">
+              {t("history.badges.repaired")}
+            </span>
+          ) : null}
+          {analysis.model3d_path !== null ? (
+            <span className="border border-line px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted">
+              {t("history.badges.model3d")}
+            </span>
+          ) : null}
+        </span>
+      ) : null}
       <span className="mt-3 block font-display text-sm font-bold uppercase tracking-wider">
         {tierName}
       </span>

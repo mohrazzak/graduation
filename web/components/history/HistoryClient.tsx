@@ -45,6 +45,10 @@ export function HistoryClient() {
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [imageUrls, setImageUrls] = useState<UrlMap>({});
   const [heatmapUrls, setHeatmapUrls] = useState<UrlMap>({});
+  // Restored image and 3D model, signed on open like the heatmap: only an
+  // opened analysis needs them, and a GLB is far too big to sign up front.
+  const [repairedUrls, setRepairedUrls] = useState<UrlMap>({});
+  const [modelUrls, setModelUrls] = useState<UrlMap>({});
   const [selected, setSelected] = useState<Analysis | null>(null);
   const [deletedToast, setDeletedToast] = useState(false);
 
@@ -84,8 +88,24 @@ export function HistoryClient() {
           }
         });
       }
+      if (analysis.repaired_path !== null && repairedUrls[analysis.id] === undefined) {
+        const path = analysis.repaired_path;
+        void getSignedUrl(path).then(({ data }) => {
+          if (data !== null) {
+            setRepairedUrls((urls) => ({ ...urls, [analysis.id]: data }));
+          }
+        });
+      }
+      if (analysis.model3d_path !== null && modelUrls[analysis.id] === undefined) {
+        const path = analysis.model3d_path;
+        void getSignedUrl(path).then(({ data }) => {
+          if (data !== null) {
+            setModelUrls((urls) => ({ ...urls, [analysis.id]: data }));
+          }
+        });
+      }
     },
-    [heatmapUrls],
+    [heatmapUrls, repairedUrls, modelUrls],
   );
 
   const handleDelete = useCallback(async (): Promise<boolean> => {
@@ -132,6 +152,8 @@ export function HistoryClient() {
           analysis={selected}
           imageUrl={imageUrls[selected.id] ?? null}
           heatmapUrl={heatmapUrls[selected.id] ?? null}
+          repairedUrl={repairedUrls[selected.id] ?? null}
+          modelUrl={modelUrls[selected.id] ?? null}
           onDelete={handleDelete}
           onClose={() => setSelected(null)}
         />

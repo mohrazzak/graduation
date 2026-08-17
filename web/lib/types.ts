@@ -32,5 +32,9 @@ export interface Analysis {
   probabilities: TierProbabilities;
   damage_percent: number;
   model_id: string;
+  /** Storage path of the restored image, once one has been generated. */
+  repaired_path: string | null;
+  /** Storage path of the generated 3D model, once the user kept one. */
+  model3d_path: string | null;
   created_at: string; // ISO timestamp
 }
