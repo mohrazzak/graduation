@@ -22,16 +22,43 @@ export interface ArtifactPersistenceSnapshot {
 }
 
 type ArtifactPersistenceListener = () => void;
-type ArtifactSaver = (
+export type ArtifactSaver = (
   analysisId: string,
   kind: ArtifactPersistenceTarget["kind"],
   jobId: string,
+  signal: AbortSignal,
 ) => Promise<boolean>;
 
 const idleSnapshot: ArtifactPersistenceSnapshot = Object.freeze({
   status: "idle",
   targetKey: null,
 });
+
+/**
+ * Defers disposal by one microtask so React Strict Mode's development-only
+ * setup -> cleanup -> setup replay keeps one live resource. A real unmount
+ * has no replacement mount, so it disposes exactly once.
+ */
+export function createReplaySafeDisposal(dispose: () => void): {
+  mount: () => () => void;
+} {
+  let latestMount = 0;
+  let disposed = false;
+
+  return {
+    mount: () => {
+      const mount = ++latestMount;
+      return () => {
+        queueMicrotask(() => {
+          if (!disposed && latestMount === mount) {
+            disposed = true;
+            dispose();
+          }
+        });
+      };
+    },
+  };
+}
 
 /**
  * Owns one generated-artifact save lifecycle independently of React or any
@@ -45,6 +72,9 @@ export class ArtifactPersistenceController {
   private attemptKey: string | null = null;
   private activeTarget: ArtifactPersistenceTarget | null = null;
   private activeTargetKey: string | null = null;
+  private activeAbortController: AbortController | null = null;
+  private saveQueue: Promise<void> = Promise.resolve();
+  private queueHasWork = false;
   private snapshot: ArtifactPersistenceSnapshot = idleSnapshot;
   private disposed = false;
 
@@ -71,6 +101,7 @@ export class ArtifactPersistenceController {
 
     if (!target.ready) {
       this.generation += 1;
+      this.abortActiveAttempt();
       this.activeTarget = null;
       this.activeTargetKey = null;
       this.attemptKey = null;
@@ -86,21 +117,26 @@ export class ArtifactPersistenceController {
 
     if (targetChanged) {
       this.generation += 1;
+      this.abortActiveAttempt();
       this.attemptKey = null;
     }
 
-    if (target.analysisStatus === "failed") {
+    // A retained id is authoritative: the saved-toast may be dismissed, which
+    // deliberately changes its presentation status back to idle.
+    if (target.analysisStatus === "failed" && !target.analysisId) {
       if (!targetChanged && this.snapshot.status === "saving") {
         this.generation += 1;
+        this.abortActiveAttempt();
         this.attemptKey = null;
       }
       this.setSnapshot("blocked", nextKey);
       return;
     }
 
-    if (!target.jobId || !target.analysisId || target.analysisStatus !== "saved") {
+    if (!target.jobId || !target.analysisId) {
       if (!targetChanged && this.snapshot.status === "saving") {
         this.generation += 1;
+        this.abortActiveAttempt();
         this.attemptKey = null;
       }
       this.setSnapshot("waiting", nextKey);
@@ -112,7 +148,7 @@ export class ArtifactPersistenceController {
     // previously waiting lifecycle is eligible to begin.
     const becameSaveable =
       targetChanged ||
-      (previousTarget?.analysisStatus !== "saved" && this.snapshot.status === "waiting");
+      (!previousTarget?.analysisId && this.snapshot.status === "waiting");
     if (becameSaveable && this.attemptKey !== nextKey) {
       this.startAttempt(target, nextKey);
     }
@@ -128,7 +164,6 @@ export class ArtifactPersistenceController {
       !target ||
       !key ||
       !target.ready ||
-      target.analysisStatus !== "saved" ||
       !target.analysisId ||
       !target.jobId
     ) {
@@ -143,6 +178,7 @@ export class ArtifactPersistenceController {
     }
     this.disposed = true;
     this.generation += 1;
+    this.abortActiveAttempt();
     this.activeTarget = null;
     this.activeTargetKey = null;
     this.attemptKey = null;
@@ -159,18 +195,40 @@ export class ArtifactPersistenceController {
     this.generation += 1;
     const attemptGeneration = this.generation;
     this.attemptKey = key;
+    const abortController = new AbortController();
+    this.activeAbortController = abortController;
     this.setSnapshot("saving", key);
 
-    let saveResult: Promise<boolean>;
-    try {
-      // Invoke the saver before returning from update so callers can observe
-      // that this target has started exactly one attempt synchronously.
-      saveResult = this.saver(analysisId, target.kind, jobId);
-    } catch {
-      saveResult = Promise.reject(new Error("Artifact saver threw"));
-    }
+    const invokeSaver = (): Promise<boolean> => {
+      if (abortController.signal.aborted || !this.isCurrentAttempt(attemptGeneration, key)) {
+        return Promise.resolve(false);
+      }
+      try {
+        return Promise.resolve(this.saver(analysisId, target.kind, jobId, abortController.signal));
+      } catch {
+        return Promise.reject(new Error("Artifact saver threw"));
+      }
+    };
 
-    Promise.resolve(saveResult)
+    // An older fetch can be aborted, but an attachment already in progress is
+    // intentionally allowed to settle. Queue the newer writer behind it so a
+    // stale completion can never overwrite the newest deterministic path.
+    const saveResult = this.queueHasWork
+      ? this.saveQueue.then(invokeSaver, invokeSaver)
+      : invokeSaver();
+    const completed = Promise.resolve(saveResult).then(
+      () => undefined,
+      () => undefined,
+    );
+    this.queueHasWork = true;
+    this.saveQueue = completed;
+    void completed.then(() => {
+      if (this.saveQueue === completed) {
+        this.queueHasWork = false;
+      }
+    });
+
+    void Promise.resolve(saveResult)
       .then(
         (saved) => {
           if (this.isCurrentAttempt(attemptGeneration, key)) {
@@ -194,6 +252,11 @@ export class ArtifactPersistenceController {
     );
   }
 
+  private abortActiveAttempt(): void {
+    this.activeAbortController?.abort();
+    this.activeAbortController = null;
+  }
+
   private setSnapshot(status: ArtifactPersistenceStatus, targetKey: string | null): void {
     if (this.snapshot.status === status && this.snapshot.targetKey === targetKey) {
       return;
@@ -213,8 +276,11 @@ export async function fetchArtifactBlob(
   url: string,
   expectedContentType: string,
   fetchImpl: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<Blob> {
-  const response = await fetchImpl(url);
+  throwIfAborted(signal);
+  const response = await fetchImpl(url, { signal });
+  throwIfAborted(signal);
   if (!response.ok) {
     throw new Error(`Artifact request failed with status ${response.status}`);
   }
@@ -229,8 +295,15 @@ export async function fetchArtifactBlob(
   }
 
   const blob = await response.blob();
+  throwIfAborted(signal);
   if (blob.size === 0) {
     throw new Error("Artifact response body is empty");
   }
   return blob;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new DOMException("Artifact persistence was aborted", "AbortError");
+  }
 }
