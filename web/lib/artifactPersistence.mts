@@ -34,6 +34,21 @@ const idleSnapshot: ArtifactPersistenceSnapshot = Object.freeze({
   targetKey: null,
 });
 
+const artifactByteLimits: Readonly<Record<string, number>> = Object.freeze({
+  "image/png": 25 * 1024 * 1024,
+  "model/gltf-binary": 32 * 1024 * 1024,
+});
+
+const pngSignature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+const pngCrcTable = new Uint32Array(256);
+for (let index = 0; index < pngCrcTable.length; index += 1) {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = (value & 1) !== 0 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+  pngCrcTable[index] = value >>> 0;
+}
+
 /**
  * Defers disposal by one microtask so React Strict Mode's development-only
  * setup -> cleanup -> setup replay keeps one live resource. A real unmount
@@ -178,7 +193,10 @@ export class ArtifactPersistenceController {
     }
     this.disposed = true;
     this.generation += 1;
-    this.abortActiveAttempt();
+    // Teardown detaches UI state but must not cancel persistence that already
+    // started: navigation should not lose a successful generated result.
+    // Superseding updates still abort through abortActiveAttempt() above.
+    this.activeAbortController = null;
     this.activeTarget = null;
     this.activeTargetKey = null;
     this.attemptKey = null;
@@ -294,12 +312,169 @@ export async function fetchArtifactBlob(
     );
   }
 
-  const blob = await response.blob();
+  const byteLimit = artifactByteLimits[normalizedExpectedType];
+  if (byteLimit === undefined) {
+    throw new Error(`Unsupported artifact media type ${expectedContentType}`);
+  }
+  const declaredLength = response.headers.get("content-length")?.trim();
+  if (declaredLength && /^\d+$/.test(declaredLength)) {
+    const declaredBytes = Number(declaredLength);
+    if (!Number.isSafeInteger(declaredBytes) || declaredBytes > byteLimit) {
+      throw new Error(`Artifact response is too large for ${normalizedExpectedType}`);
+    }
+  }
+
+  const bytes = await readBoundedBody(response, byteLimit, signal);
   throwIfAborted(signal);
-  if (blob.size === 0) {
+  if (bytes.byteLength === 0) {
     throw new Error("Artifact response body is empty");
   }
-  return blob;
+  if (normalizedExpectedType === "image/png" && !isValidPng(bytes)) {
+    throw new Error("Artifact response is not a valid PNG");
+  }
+  if (normalizedExpectedType === "model/gltf-binary" && !isValidGlb(bytes)) {
+    throw new Error("Artifact response is not a valid GLB");
+  }
+  return new Blob([bytes.buffer as ArrayBuffer], { type: normalizedExpectedType });
+}
+
+async function readBoundedBody(
+  response: Response,
+  byteLimit: number,
+  signal: AbortSignal | undefined,
+): Promise<Uint8Array> {
+  if (response.body === null) {
+    return new Uint8Array();
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      throwIfAborted(signal);
+      const { done, value } = await reader.read();
+      throwIfAborted(signal);
+      if (done) break;
+      total += value.byteLength;
+      if (total > byteLimit) {
+        void reader.cancel().catch(() => undefined);
+        throw new Error("Artifact response body is too large");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+function isValidPng(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < pngSignature.byteLength + 12) return false;
+  if (!pngSignature.every((value, index) => bytes[index] === value)) return false;
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = pngSignature.byteLength;
+  let chunkIndex = 0;
+  let sawImageData = false;
+  while (offset < bytes.byteLength) {
+    if (offset + 12 > bytes.byteLength) return false;
+    const length = view.getUint32(offset, false);
+    const typeOffset = offset + 4;
+    const dataOffset = typeOffset + 4;
+    const crcOffset = dataOffset + length;
+    const nextOffset = crcOffset + 4;
+    if (nextOffset > bytes.byteLength) return false;
+
+    const type = ascii(bytes, typeOffset, 4);
+    if (view.getUint32(crcOffset, false) !== pngCrc32(bytes, typeOffset, crcOffset)) {
+      return false;
+    }
+    if (chunkIndex === 0) {
+      if (type !== "IHDR" || length !== 13) return false;
+      const width = view.getUint32(dataOffset, false);
+      const height = view.getUint32(dataOffset + 4, false);
+      const bitDepth = bytes[dataOffset + 8];
+      const colorType = bytes[dataOffset + 9];
+      const validDepths: Readonly<Record<number, readonly number[]>> = {
+        0: [1, 2, 4, 8, 16],
+        2: [8, 16],
+        3: [1, 2, 4, 8],
+        4: [8, 16],
+        6: [8, 16],
+      };
+      if (
+        width === 0 ||
+        height === 0 ||
+        bitDepth === undefined ||
+        colorType === undefined ||
+        !validDepths[colorType]?.includes(bitDepth) ||
+        bytes[dataOffset + 10] !== 0 ||
+        bytes[dataOffset + 11] !== 0 ||
+        ![0, 1].includes(bytes[dataOffset + 12] ?? -1)
+      ) {
+        return false;
+      }
+    } else if (type === "IHDR") {
+      return false;
+    }
+
+    if (type === "IDAT") sawImageData = true;
+    if (type === "IEND") {
+      return length === 0 && sawImageData && nextOffset === bytes.byteLength;
+    }
+    offset = nextOffset;
+    chunkIndex += 1;
+  }
+  return false;
+}
+
+function pngCrc32(bytes: Uint8Array, start: number, end: number): number {
+  let crc = 0xffffffff;
+  for (let index = start; index < end; index += 1) {
+    const byte = bytes[index];
+    if (byte === undefined) return -1;
+    crc = (pngCrcTable[(crc ^ byte) & 0xff] ?? 0) ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function isValidGlb(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < 20 || ascii(bytes, 0, 4) !== "glTF") return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.byteLength) {
+    return false;
+  }
+
+  let offset = 12;
+  let chunkIndex = 0;
+  while (offset < bytes.byteLength) {
+    if (offset + 8 > bytes.byteLength) return false;
+    const chunkLength = view.getUint32(offset, true);
+    const chunkType = view.getUint32(offset + 4, true);
+    const nextOffset = offset + 8 + chunkLength;
+    if (chunkLength % 4 !== 0 || nextOffset > bytes.byteLength) return false;
+    if (chunkIndex === 0 && chunkType !== 0x4e4f534a) return false;
+    offset = nextOffset;
+    chunkIndex += 1;
+  }
+  return chunkIndex > 0 && offset === bytes.byteLength;
+}
+
+function ascii(bytes: Uint8Array, start: number, length: number): string {
+  let value = "";
+  for (let index = start; index < start + length; index += 1) {
+    const byte = bytes[index];
+    if (byte === undefined) return "";
+    value += String.fromCharCode(byte);
+  }
+  return value;
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

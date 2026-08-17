@@ -27,6 +27,22 @@ const deferred = () => {
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
+const validPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+  "base64",
+);
+
+const validGlb = (() => {
+  const bytes = Buffer.alloc(24);
+  bytes.write("glTF", 0, "ascii");
+  bytes.writeUInt32LE(2, 4);
+  bytes.writeUInt32LE(bytes.length, 8);
+  bytes.writeUInt32LE(4, 12);
+  bytes.write("JSON", 16, "ascii");
+  bytes.write("{}  ", 20, "ascii");
+  return bytes;
+})();
+
 test("waits for the base analysis id before saving a ready artifact", () => {
   const saveCalls = [];
   const controller = new ArtifactPersistenceController(async (...args) => {
@@ -87,6 +103,29 @@ test("replay-safe disposal ignores a Strict Mode effect replay and disposes on r
   mountedCleanup();
   await new Promise((resolve) => queueMicrotask(resolve));
   assert.equal(disposals, 1);
+});
+
+test("real teardown lets an already-started persistence attempt finish", async () => {
+  const pending = deferred();
+  let completed = false;
+  let saverSignal;
+  const controller = new ArtifactPersistenceController(async (_id, _kind, _jobId, signal) => {
+    saverSignal = signal;
+    await pending.promise;
+    completed = true;
+    return true;
+  });
+
+  controller.update(target());
+  assert.ok(saverSignal);
+
+  controller.dispose();
+  assert.equal(saverSignal.aborted, false);
+
+  pending.resolve();
+  await pending.promise;
+  await settle();
+  assert.equal(completed, true);
 });
 
 test("aborts obsolete work and serializes writers so the newest job finishes last", async () => {
@@ -248,23 +287,72 @@ test("normalizes response media types and returns non-empty blobs", async () => 
     "/jobs/1/artifact/repaired",
     "image/png",
     async () =>
-      new Response(new Uint8Array([137, 80, 78, 71]), {
+      new Response(validPng, {
         status: 200,
         headers: { "content-type": "image/png; charset=binary" },
       }),
   );
-  assert.equal(png.size, 4);
+  assert.deepEqual(Buffer.from(await png.arrayBuffer()), validPng);
 
   const glb = await fetchArtifactBlob(
     "/jobs/1/artifact/model",
     "model/gltf-binary",
     async () =>
-      new Response(new Uint8Array([1, 2, 3]), {
+      new Response(validGlb, {
         status: 200,
         headers: { "content-type": "model/gltf-binary" },
       }),
   );
-  assert.equal(glb.size, 3);
+  assert.deepEqual(Buffer.from(await glb.arrayBuffer()), validGlb);
+});
+
+test("rejects corrupt artifacts even when their media type is correct", async () => {
+  const corruptedPng = Buffer.from(validPng);
+  corruptedPng[corruptedPng.length - 1] ^= 0xff;
+  const wrongGlbLength = Buffer.from(validGlb);
+  wrongGlbLength.writeUInt32LE(wrongGlbLength.length + 4, 8);
+
+  await assert.rejects(
+    fetchArtifactBlob("/jobs/1/artifact/repaired", "image/png", async () =>
+      new Response(corruptedPng, {
+        headers: { "content-type": "image/png" },
+      }),
+    ),
+    /valid PNG/,
+  );
+  await assert.rejects(
+    fetchArtifactBlob("/jobs/1/artifact/model", "model/gltf-binary", async () =>
+      new Response(wrongGlbLength, {
+        headers: { "content-type": "model/gltf-binary" },
+      }),
+    ),
+    /valid GLB/,
+  );
+});
+
+test("rejects a declared artifact size above its media limit before reading", async () => {
+  await assert.rejects(
+    fetchArtifactBlob("/jobs/1/artifact/model", "model/gltf-binary", async () =>
+      new Response(validGlb, {
+        headers: {
+          "content-type": "model/gltf-binary",
+          "content-length": String(32 * 1024 * 1024 + 1),
+        },
+      }),
+    ),
+    /too large/,
+  );
+});
+
+test("rejects an actual artifact body above its media limit without a length header", async () => {
+  await assert.rejects(
+    fetchArtifactBlob("/jobs/1/artifact/repaired", "image/png", async () =>
+      new Response(new Uint8Array(25 * 1024 * 1024 + 1), {
+        headers: { "content-type": "image/png" },
+      }),
+    ),
+    /too large/,
+  );
 });
 
 test("passes the abort signal to artifact fetches", async () => {
@@ -275,7 +363,7 @@ test("passes the abort signal to artifact fetches", async () => {
     "image/png",
     async (_url, init) => {
       receivedSignal = init.signal;
-      return new Response(new Uint8Array([137, 80, 78, 71]), {
+      return new Response(validPng, {
         status: 200,
         headers: { "content-type": "image/png" },
       });
