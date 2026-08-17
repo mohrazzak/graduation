@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from jobs import repair
 from main import create_app
 
 
@@ -54,20 +55,35 @@ def test_repair_rejects_a_non_tier_value(client: TestClient) -> None:
     assert "NC" in response.json()["detail"]
 
 
-def test_repair_produces_the_local_artifacts(client: TestClient) -> None:
-    """Mask and edges are computed locally and must appear even with no API key.
+def test_repair_passes_the_raw_mask_and_tier_to_the_selected_provider(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The provider receives the Pillow mask, while local artifacts remain public.
 
     They are what the interactive canvas shows, so they cannot depend on quota.
     """
+    seen: dict[str, object] = {}
+
+    def generate_repaired(**kwargs: object) -> bytes:
+        seen.update(kwargs)
+        return _jpeg()
+
+    monkeypatch.setattr(repair, "generate_repaired", generate_repaired)
     started = client.post("/jobs/repair", files=_files(), data={"tier": "PC"})
     assert started.status_code == 200
     job_id = started.json()["job_id"]
 
     body = _wait(client, job_id)
-    # Without a working GEMINI_API_KEY the job ends in "error" — but the local
-    # stages ran first, so their artifacts are still attached and fetchable.
+    assert body["status"] == "done"
     assert "mask" in body["artifacts"]
     assert "edges" in body["artifacts"]
+    assert "repaired" in body["artifacts"]
+    assert seen["image_bytes"] == _jpeg()
+    assert seen["tier"] == "PC"
+    assert seen["prompt"]
+    assert isinstance(seen["building_mask"], Image.Image)
+    assert seen["building_mask"].mode == "L"
+    assert seen["building_mask"].size == (160, 120)
 
     for name in ("mask", "edges"):
         artifact = client.get(f"/jobs/{job_id}/artifact/{name}")
