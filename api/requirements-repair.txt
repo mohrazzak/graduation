@@ -1,0 +1,8 @@
+# Requires torch==2.12.0+cu130 from the PyTorch CUDA 13.0 index.
+diffusers==0.39.0
+accelerate==1.14.0
+transformers==5.12.1
+safetensors==0.8.0
+opencv-python==4.13.0.92
+numpy==2.4.6
+pillow==12.2.0

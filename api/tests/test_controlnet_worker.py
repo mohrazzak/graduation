@@ -1,0 +1,217 @@
+"""The optional CUDA worker validates requests before crossing into Diffusers."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+from PIL import Image
+
+from repair.controlnet_worker import WorkerError, main, run_request
+
+
+class FakeGenerator:
+    def __init__(self, seed: int) -> None:
+        self.seed = seed
+
+
+class FakePipeline:
+    def __init__(self, *, safety_flags: object = (False,)) -> None:
+        self.safety_checker = object()
+        self.safety_flags = safety_flags
+        self.offload_enabled = False
+        self.calls: list[dict[str, Any]] = []
+
+    def enable_model_cpu_offload(self) -> None:
+        self.offload_enabled = True
+
+    def __call__(self, **kwargs: Any) -> SimpleNamespace:
+        assert self.offload_enabled, "inference ran before CPU offload was enabled"
+        self.calls.append(kwargs)
+        return SimpleNamespace(
+            images=[Image.new("RGB", (512, 512), "blue")],
+            nsfw_content_detected=self.safety_flags,
+        )
+
+
+def write_request(
+    directory: Path,
+    *,
+    input_path: Path | None = None,
+    mask_path: Path | None = None,
+    output_path: Path | None = None,
+) -> Path:
+    source = input_path or directory / "input.png"
+    mask = mask_path or directory / "mask.png"
+    output = output_path or directory / "repaired.png"
+    if input_path is None:
+        Image.new("RGB", (14, 10), "red").save(source, format="PNG")
+    if mask_path is None:
+        building = Image.new("L", (14, 10), 0)
+        building.paste(255, (0, 0, 7, 10))
+        building.save(mask, format="PNG")
+    request = directory / "request.json"
+    request.write_text(
+        json.dumps(
+            {
+                "input_path": str(source),
+                "mask_path": str(mask),
+                "output_path": str(output),
+                "tier": "GC",
+                "prompt": "restore the concrete facade",
+                "seed": 1_234_567,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return request
+
+
+def test_module_import_does_not_import_torch_or_diffusers() -> None:
+    """Importing the worker in FastAPI must not activate either heavyweight stack."""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; import repair.controlnet_worker; "
+                "assert 'torch' not in sys.modules; "
+                "assert 'diffusers' not in sys.modules"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_cli_request_prepares_generation_and_writes_composited_png(tmp_path: Path) -> None:
+    """Wrong model settings, image preparation, or output handling breaks repair fidelity."""
+    request = write_request(tmp_path)
+    pipeline = FakePipeline()
+    loaded: dict[str, str] = {}
+
+    def loader(**identifiers: str) -> tuple[FakePipeline, Any]:
+        loaded.update(identifiers)
+        return pipeline, FakeGenerator
+
+    assert main(["--request", str(request)], loader=loader) == 0
+
+    assert loaded == {
+        "controlnet_model_id": "lllyasviel/sd-controlnet-canny",
+        "controlnet_revision": "7f2f69197050967007f6bbd23ab5e52f0384162a",
+        "inpaint_model_id": "stable-diffusion-v1-5/stable-diffusion-inpainting",
+        "inpaint_revision": "8a4288a76071f7280aedbdb3253bdb9e9d5d84bb",
+    }
+    assert len(pipeline.calls) == 1
+    call = pipeline.calls[0]
+    assert call["prompt"] == "restore the concrete facade"
+    assert call["negative_prompt"] == (
+        "sloped roof, slanted roof, broken roof, ruins, cracks, damage, debris, "
+        "hole, distorted architecture, blurry, transparent"
+    )
+    assert call["num_inference_steps"] == 30
+    assert call["guidance_scale"] == 9.5
+    assert call["controlnet_conditioning_scale"] == 0.5
+    assert call["height"] == 512
+    assert call["width"] == 512
+    assert call["generator"].seed == 1_234_567
+    for key in ("image", "mask_image", "control_image"):
+        assert call[key].size == (512, 512)
+
+    with Image.open(tmp_path / "repaired.png") as repaired:
+        assert repaired.format == "PNG"
+        assert repaired.mode == "RGB"
+        assert repaired.size == (14, 10)
+        assert repaired.getpixel((0, 5)) == (0, 0, 255)
+        assert repaired.getpixel((13, 5)) == (255, 0, 0)
+
+
+@pytest.mark.parametrize("field", ["input_path", "mask_path", "output_path"])
+def test_request_rejects_paths_outside_its_directory(tmp_path: Path, field: str) -> None:
+    """A crafted request must not read or overwrite files outside its owned directory."""
+    request_dir = tmp_path / "request"
+    request_dir.mkdir()
+    outside = tmp_path / f"outside-{field}.png"
+    if field != "output_path":
+        Image.new("RGB", (2, 2), "black").save(outside, format="PNG")
+    request = write_request(request_dir)
+    payload = json.loads(request.read_text(encoding="utf-8"))
+    payload[field] = str(outside)
+    request.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(WorkerError, match="local_generation_failed"):
+        run_request(request, loader=lambda **kwargs: pytest.fail("must not load models"))
+
+
+def test_request_rejects_a_relative_file_path(tmp_path: Path) -> None:
+    """Relative file paths could resolve differently from the API-owned request directory."""
+    request = write_request(tmp_path)
+    payload = json.loads(request.read_text(encoding="utf-8"))
+    payload["input_path"] = "input.png"
+    request.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(WorkerError, match="local_generation_failed"):
+        run_request(request, loader=lambda **kwargs: pytest.fail("must not load models"))
+
+
+def test_request_rejects_a_relative_request_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI boundary requires an unambiguous absolute request location."""
+    write_request(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(WorkerError, match="local_generation_failed"):
+        run_request(Path("request.json"), loader=lambda **kwargs: pytest.fail("must not load"))
+
+
+@pytest.mark.parametrize(
+    "contents",
+    [
+        "{not-json",
+        "[]",
+        json.dumps({"input_path": 7}),
+    ],
+)
+def test_request_rejects_malformed_json(tmp_path: Path, contents: str) -> None:
+    """Malformed worker input must become a bounded failure before model loading."""
+    request = tmp_path / "request.json"
+    request.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(WorkerError, match="local_generation_failed"):
+        run_request(request, loader=lambda **kwargs: pytest.fail("must not load models"))
+
+
+@pytest.mark.parametrize("flags", [[True], None, [], [False, False]])
+def test_safety_result_fails_closed(tmp_path: Path, flags: object) -> None:
+    """Missing, ambiguous, or unsafe checker results must never produce an artifact."""
+    request = write_request(tmp_path)
+    pipeline = FakePipeline(safety_flags=flags)
+
+    with pytest.raises(WorkerError, match="local_generation_failed"):
+        run_request(request, loader=lambda **kwargs: (pipeline, FakeGenerator))
+
+    assert not (tmp_path / "repaired.png").exists()
+
+
+def test_base_environment_probe_fails_promptly_without_loading_weights() -> None:
+    """The CPU-only API venv reports GPU unavailability before touching Diffusers."""
+    completed = subprocess.run(
+        [sys.executable, "-m", "repair.controlnet_worker", "--probe"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert completed.returncode != 0
+    assert completed.stdout == ""
+    assert completed.stderr.strip() == "local_gpu_unavailable"
