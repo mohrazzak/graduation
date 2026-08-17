@@ -158,6 +158,8 @@
     "notConfigured": "History is unavailable — Supabase is not configured yet. Add the project URL and anon key to web/.env.local, then retry.",
     "deleteFailed": "The assessment was not deleted. Check your connection, then retry.",
     "artifactLoading": "Loading the saved output...",
+    "artifactFailed": "The saved output could not be loaded.",
+    "artifactRetry": "Retry loading output",
     "badges": {
       "repaired": "Restored",
       "model3d": "3D"

@@ -13,6 +13,7 @@ import { HeatmapToggle } from "@/components/analyze/HeatmapToggle";
 import { ImageWithHeatmap } from "@/components/analyze/ImageWithHeatmap";
 import { ReportDocument } from "@/components/report/ReportDocument";
 import { Button } from "@/components/ui/Button";
+import type { SignedArtifact } from "@/lib/signedArtifact.mts";
 import { TierStrip } from "@/components/ui/TierStrip";
 import { getTier, isAlertTier } from "@/lib/tiers";
 import type { Analysis } from "@/lib/types";
@@ -24,10 +25,14 @@ export interface AnalysisModalProps {
   imageUrl: string | null;
   /** Signed heatmap URL, resolved lazily by the opener; null while pending/failed. */
   heatmapUrl: string | null;
-  /** Signed URL of the restored image, when one was generated. */
-  repairedUrl: string | null;
-  /** Signed URL of the kept 3D model, when one was generated. */
-  modelUrl: string | null;
+  /** Signing state of the restored image, when one was generated. */
+  repairedArtifact: SignedArtifact;
+  /** Signing state of the kept 3D model, when one was generated. */
+  modelArtifact: SignedArtifact;
+  /** Requests a fresh signed URL for a restored image that failed to load. */
+  onRetryRepaired: () => void;
+  /** Requests a fresh signed URL for a 3D model that failed to load. */
+  onRetryModel: () => void;
   /** Resolves true on success (the opener closes the modal), false on failure. */
   onDelete: () => Promise<boolean>;
   onClose: () => void;
@@ -40,8 +45,10 @@ export function AnalysisModal({
   analysis,
   imageUrl,
   heatmapUrl,
-  repairedUrl,
-  modelUrl,
+  repairedArtifact,
+  modelArtifact,
+  onRetryRepaired,
+  onRetryModel,
   onDelete,
   onClose,
 }: AnalysisModalProps) {
@@ -152,14 +159,22 @@ export function AnalysisModal({
           <p className="mb-2 text-xs uppercase tracking-wider text-muted">
             {t("repair.beforeAfter")}
           </p>
-          {repairedUrl !== null && imageUrl !== null ? (
+          {imageUrl === null ? (
+            <p role="alert" className="text-xs text-muted">
+              {t("history.artifactFailed")}
+            </p>
+          ) : repairedArtifact.status === "ready" ? (
             <BeforeAfter
               baseSrc={imageUrl}
-              overlaySrc={repairedUrl}
+              overlaySrc={repairedArtifact.url}
               overlayAlt={t("repair.repairedAlt")}
             />
+          ) : repairedArtifact.status === "loading" ? (
+            <p role="status" className="text-xs text-muted">
+              {t("history.artifactLoading")}
+            </p>
           ) : (
-            <p className="text-xs text-muted">{t("history.artifactLoading")}</p>
+            <ArtifactFailure onRetry={onRetryRepaired} />
           )}
         </div>
       ) : null}
@@ -168,10 +183,17 @@ export function AnalysisModal({
           <p className="mb-2 text-xs uppercase tracking-wider text-muted">
             {t("model3d.title")}
           </p>
-          {modelUrl !== null ? (
-            <ModelViewer src={modelUrl} downloadName={`damagescale-${analysis.id.slice(0, 8)}.glb`} />
+          {modelArtifact.status === "ready" ? (
+            <ModelViewer
+              src={modelArtifact.url}
+              downloadName={`damagescale-${analysis.id.slice(0, 8)}.glb`}
+            />
+          ) : modelArtifact.status === "loading" ? (
+            <p role="status" className="text-xs text-muted">
+              {t("history.artifactLoading")}
+            </p>
           ) : (
-            <p className="text-xs text-muted">{t("history.artifactLoading")}</p>
+            <ArtifactFailure onRetry={onRetryModel} />
           )}
         </div>
       ) : null}
@@ -226,5 +248,18 @@ export function AnalysisModal({
         createdAt={new Date(analysis.created_at)}
       />
     </ModalShell>
+  );
+}
+
+function ArtifactFailure({ onRetry }: { onRetry: () => void }) {
+  const t = useTranslations();
+
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-3">
+      <p className="text-xs text-muted">{t("history.artifactFailed")}</p>
+      <Button variant="ghost" onClick={onRetry}>
+        {t("history.artifactRetry")}
+      </Button>
+    </div>
   );
 }

@@ -1,12 +1,13 @@
 "use client";
 // History orchestrator: loads the saved analyses + signed thumbnail URLs, then
 // drives loading/error/empty/grid states, the detail modal, delete, and toast.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { Toast } from "@/components/ui/Toast";
 import { deleteAnalysis, getSignedUrl, listAnalyses } from "@/lib/supabase/queries";
+import { loadSignedArtifact, type SignedArtifact } from "@/lib/signedArtifact.mts";
 import type { Analysis } from "@/lib/types";
 import { AnalysisModal } from "./AnalysisModal";
 import { EmptyState } from "./EmptyState";
@@ -15,6 +16,8 @@ import { HistoryStats } from "./HistoryStats";
 
 type LoadState = "loading" | "error" | "ready";
 type UrlMap = Record<string, string | null>;
+type ArtifactMap = Record<string, SignedArtifact>;
+type ArtifactMapSetter = Dispatch<SetStateAction<ArtifactMap>>;
 
 type HistoryLoad =
   | { ok: true; analyses: Analysis[]; imageUrls: UrlMap }
@@ -47,8 +50,8 @@ export function HistoryClient() {
   const [heatmapUrls, setHeatmapUrls] = useState<UrlMap>({});
   // Restored image and 3D model, signed on open like the heatmap: only an
   // opened analysis needs them, and a GLB is far too big to sign up front.
-  const [repairedUrls, setRepairedUrls] = useState<UrlMap>({});
-  const [modelUrls, setModelUrls] = useState<UrlMap>({});
+  const [repairedArtifacts, setRepairedArtifacts] = useState<ArtifactMap>({});
+  const [modelArtifacts, setModelArtifacts] = useState<ArtifactMap>({});
   const [selected, setSelected] = useState<Analysis | null>(null);
   const [deletedToast, setDeletedToast] = useState(false);
 
@@ -72,6 +75,34 @@ export function HistoryClient() {
     void fetchHistory().then(applyLoad);
   }, [applyLoad]);
 
+  const signArtifact = useCallback(
+    (analysisId: string, path: string, setArtifacts: ArtifactMapSetter) => {
+      setArtifacts((artifacts) => ({ ...artifacts, [analysisId]: { status: "loading" } }));
+      void loadSignedArtifact(path, getSignedUrl).then((artifact) => {
+        setArtifacts((artifacts) => ({ ...artifacts, [analysisId]: artifact }));
+      });
+    },
+    [],
+  );
+
+  const signRepairedArtifact = useCallback(
+    (analysis: Analysis) => {
+      if (analysis.repaired_path !== null) {
+        signArtifact(analysis.id, analysis.repaired_path, setRepairedArtifacts);
+      }
+    },
+    [signArtifact],
+  );
+
+  const signModelArtifact = useCallback(
+    (analysis: Analysis) => {
+      if (analysis.model3d_path !== null) {
+        signArtifact(analysis.id, analysis.model3d_path, setModelArtifacts);
+      }
+    },
+    [signArtifact],
+  );
+
   const open = useCallback(
     (analysis: Analysis) => {
       setSelected(analysis);
@@ -88,25 +119,23 @@ export function HistoryClient() {
           }
         });
       }
-      if (analysis.repaired_path !== null && repairedUrls[analysis.id] === undefined) {
-        const path = analysis.repaired_path;
-        void getSignedUrl(path).then(({ data }) => {
-          if (data !== null) {
-            setRepairedUrls((urls) => ({ ...urls, [analysis.id]: data }));
-          }
-        });
+      if (analysis.repaired_path !== null && repairedArtifacts[analysis.id] === undefined) {
+        signRepairedArtifact(analysis);
       }
-      if (analysis.model3d_path !== null && modelUrls[analysis.id] === undefined) {
-        const path = analysis.model3d_path;
-        void getSignedUrl(path).then(({ data }) => {
-          if (data !== null) {
-            setModelUrls((urls) => ({ ...urls, [analysis.id]: data }));
-          }
-        });
+      if (analysis.model3d_path !== null && modelArtifacts[analysis.id] === undefined) {
+        signModelArtifact(analysis);
       }
     },
-    [heatmapUrls, repairedUrls, modelUrls],
+    [heatmapUrls, modelArtifacts, repairedArtifacts, signModelArtifact, signRepairedArtifact],
   );
+
+  const retryRepairedArtifact = useCallback(() => {
+    if (selected !== null) signRepairedArtifact(selected);
+  }, [selected, signRepairedArtifact]);
+
+  const retryModelArtifact = useCallback(() => {
+    if (selected !== null) signModelArtifact(selected);
+  }, [selected, signModelArtifact]);
 
   const handleDelete = useCallback(async (): Promise<boolean> => {
     if (selected === null) return false;
@@ -152,8 +181,10 @@ export function HistoryClient() {
           analysis={selected}
           imageUrl={imageUrls[selected.id] ?? null}
           heatmapUrl={heatmapUrls[selected.id] ?? null}
-          repairedUrl={repairedUrls[selected.id] ?? null}
-          modelUrl={modelUrls[selected.id] ?? null}
+          repairedArtifact={repairedArtifacts[selected.id] ?? { status: "loading" }}
+          modelArtifact={modelArtifacts[selected.id] ?? { status: "loading" }}
+          onRetryRepaired={retryRepairedArtifact}
+          onRetryModel={retryModelArtifact}
           onDelete={handleDelete}
           onClose={() => setSelected(null)}
         />
