@@ -18,6 +18,8 @@ interface Fixture {
 
 const MODEL_3D_FIXTURES: readonly Fixture[] = [
   { src: "/fixtures/sample-NC.glb", sourceFile: "sample-NC.jpg" },
+  { src: "/fixtures/sample-PC.glb", sourceFile: "sample-PC.jpg" },
+  { src: "/fixtures/sample-GC.glb", sourceFile: "sample-GC.jpg" },
 ] as const;
 
 /**
