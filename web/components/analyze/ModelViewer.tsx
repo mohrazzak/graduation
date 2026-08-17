@@ -44,6 +44,12 @@ export function ModelViewer({ src, downloadName }: ModelViewerProps) {
   useEffect(() => {
     if (!ready || hostRef.current === null || viewerRef.current !== null) return;
     const el = document.createElement("model-viewer");
+    // WHY eager: <model-viewer> defers loading until the element nears the
+    // viewport. This panel sits below the fold, so the default left a user who
+    // had just clicked "reconstruct" staring at an empty box until they
+    // happened to scroll. The element only exists because they asked for it,
+    // so there is nothing to defer.
+    el.setAttribute("loading", "eager");
     el.setAttribute("camera-controls", "");
     el.setAttribute("touch-action", "pan-y");
     el.setAttribute("shadow-intensity", "1");
