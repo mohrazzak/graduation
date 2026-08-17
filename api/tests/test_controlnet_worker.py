@@ -173,6 +173,47 @@ def test_request_rejects_a_relative_request_path(
         run_request(Path("request.json"), loader=lambda **kwargs: pytest.fail("must not load"))
 
 
+def test_cli_bounds_an_embedded_nul_owned_path(tmp_path: Path) -> None:
+    """A malformed absolute path must not escape the CLI as a traceback."""
+    request = write_request(tmp_path)
+    payload = json.loads(request.read_text(encoding="utf-8"))
+    payload["input_path"] = f"{tmp_path}/bad\0.png"
+    request.write_text(json.dumps(payload), encoding="utf-8")
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "repair.controlnet_worker", "--request", str(request)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert completed.stdout == ""
+    assert completed.stderr == "local_generation_failed\n"
+    assert not (tmp_path / "repaired.png").exists()
+
+
+def test_cli_bounds_missing_opencv_during_control_preparation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An unavailable Canny dependency must not escape before model loading."""
+    request = write_request(tmp_path)
+    monkeypatch.setitem(sys.modules, "cv2", None)
+
+    returncode = main(
+        ["--request", str(request)],
+        loader=lambda **kwargs: pytest.fail("must not load models"),
+    )
+
+    captured = capsys.readouterr()
+    assert returncode == 1
+    assert captured.out == ""
+    assert captured.err == "local_generation_failed\n"
+    assert not (tmp_path / "repaired.png").exists()
+
+
 @pytest.mark.parametrize(
     "contents",
     [

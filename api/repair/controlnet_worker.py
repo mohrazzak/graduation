@@ -75,7 +75,7 @@ def _owned_path(
         raise _fail()
     try:
         resolved = candidate.resolve(strict=must_exist)
-    except (OSError, RuntimeError) as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
         raise _fail() from exc
     if not resolved.is_relative_to(request_dir):
         raise _fail()
@@ -97,7 +97,7 @@ def _parse_request(request_path: Path) -> WorkerRequest:
         payload = json.loads(resolved_request.read_text(encoding="utf-8"))
     except WorkerError:
         raise
-    except (json.JSONDecodeError, OSError, UnicodeError) as exc:
+    except (json.JSONDecodeError, OSError, UnicodeError, ValueError) as exc:
         raise _fail() from exc
     if not isinstance(payload, dict):
         raise _fail()
@@ -202,12 +202,17 @@ def _safe_image(result: object) -> Image.Image:
 
 def run_request(request_path: Path, *, loader: PipelineLoader | None = None) -> Path:
     """Validate one request, generate once, and save one composited PNG."""
-    request = _parse_request(request_path)
-    original = _load_png(request.input_path, "RGB")
-    building_mask = _load_png(request.mask_path, "L")
-    inpaint_mask = repair_mask(building_mask, request.tier, _TARGET_SIZE)
-    init_image = original.resize(_TARGET_SIZE, Image.Resampling.LANCZOS)
-    control_image = control_edges(original, inpaint_mask, _TARGET_SIZE)
+    try:
+        request = _parse_request(request_path)
+        original = _load_png(request.input_path, "RGB")
+        building_mask = _load_png(request.mask_path, "L")
+        inpaint_mask = repair_mask(building_mask, request.tier, _TARGET_SIZE)
+        init_image = original.resize(_TARGET_SIZE, Image.Resampling.LANCZOS)
+        control_image = control_edges(original, inpaint_mask, _TARGET_SIZE)
+    except WorkerError:
+        raise
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise _fail() from exc
 
     if loader is None:
         _probe_runtime()
