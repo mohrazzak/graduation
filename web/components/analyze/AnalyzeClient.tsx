@@ -44,7 +44,14 @@ export function AnalyzeClient() {
   // render time would mint a new id/timestamp on every re-render.
   const [reportId, setReportId] = useState<string | null>(null);
   const [reportedAt, setReportedAt] = useState<Date | null>(null);
-  const { status: saveStatus, errorCode: saveError, save, reset: resetSave } = useSaveAnalysis();
+  const {
+    status: saveStatus,
+    errorCode: saveError,
+    analysisId,
+    save,
+    dismiss: dismissSave,
+    reset: resetSave,
+  } = useSaveAnalysis();
   const { models, selected: selectedModel, select: selectModel } = useModels();
   // Monotonic id: any result landing after a reset/new selection is discarded.
   const requestIdRef = useRef(0);
@@ -169,7 +176,12 @@ export function AnalyzeClient() {
         ) : null}
         {/* What to do next with this building — gated by the tier. */}
         {phase === "done" && prediction !== null && file !== null ? (
-          <ServiceRail file={file} tier={prediction.tier} sourceSrc={previewUrl} />
+          <ServiceRail
+            file={file}
+            tier={prediction.tier}
+            sourceSrc={previewUrl}
+            analysisId={analysisId}
+          />
         ) : null}
         {phase === "done" && saveError !== null ? (
           <SaveFailedNote
@@ -197,7 +209,7 @@ export function AnalyzeClient() {
 
       {saveStatus === "saved" ? (
         <Toast message={t("analyze.savedToast")} href="/history"
-          linkLabel={t("analyze.savedLink")} onDismiss={resetSave} />
+          linkLabel={t("analyze.savedLink")} onDismiss={dismissSave} />
       ) : null}
 
       {/* Persistent polite live region: visual focus never moves to the result,

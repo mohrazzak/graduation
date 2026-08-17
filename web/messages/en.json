@@ -346,6 +346,12 @@
       "aborted": "Reconstruction was cancelled.",
       "job_expired": "That reconstruction expired. Run it again."
     },
-    "fixtureNotice": "Pre-generated example — this is a stored 3D model of this sample photo, produced earlier by the same service. It is not a live result of the run above."
+    "fixtureNotice": "Pre-generated example — this is a stored 3D model of this sample photo, produced earlier by the same service. It is not a live result of the run above.",
+    "keep": {
+      "action": "Keep this model",
+      "kept": "Model saved",
+      "hint": "Models are large, so they are only stored when you ask.",
+      "failed": "Could not save the model. Try again."
+    }
   }
 }

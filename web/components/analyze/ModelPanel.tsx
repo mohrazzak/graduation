@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { CornerTicks } from "@/components/ui/CornerTicks";
 import { model3dFixtureFor } from "@/lib/fixtures";
+import { attachModel3d } from "@/lib/supabase/queries";
 import { artifactUrl, startModel3d } from "@/lib/jobs";
 import { ModelViewer } from "./ModelViewer";
 import { StageProgress } from "./StageProgress";
@@ -14,6 +15,8 @@ import { useJob } from "./useJob";
 
 export interface ModelPanelProps {
   file: File;
+  /** Row to attach a kept model to; null until the analysis has saved. */
+  analysisId: string | null;
   /** Set once a restoration finished, enabling the "from repaired" source. */
   repairedJobId: string | null;
   primary: boolean;
@@ -21,10 +24,32 @@ export interface ModelPanelProps {
 
 const STAGE_KEYS = ["uploading", "reconstructing", "downloading"] as const;
 
-export function ModelPanel({ file, repairedJobId, primary }: ModelPanelProps) {
+export function ModelPanel({
+  file,
+  analysisId,
+  repairedJobId,
+  primary,
+}: ModelPanelProps) {
   const t = useTranslations();
   const { jobId, state, running, start } = useJob();
   const [source, setSource] = useState<"original" | "repaired">("original");
+  // Keeping a model is explicit: a GLB is 9-17 MB against a 1 GB bucket, so the
+  // user decides which are worth storing rather than every run filling it.
+  const [keepState, setKeepState] = useState<"idle" | "saving" | "kept" | "failed">(
+    "idle",
+  );
+
+  async function keep(): Promise<void> {
+    if (jobId === null || analysisId === null) return;
+    setKeepState("saving");
+    try {
+      const response = await fetch(artifactUrl(jobId, "model"));
+      const { error } = await attachModel3d(analysisId, await response.blob());
+      setKeepState(error === null ? "kept" : "failed");
+    } catch {
+      setKeepState("failed");
+    }
+  }
 
   async function run(from: "original" | "repaired"): Promise<void> {
     setSource(from);
@@ -79,10 +104,26 @@ export function ModelPanel({ file, repairedJobId, primary }: ModelPanelProps) {
               indefiniteKey="reconstructing"
             />
             {model && jobId !== null ? (
-              <ModelViewer
-                src={artifactUrl(jobId, "model")}
-                downloadName={`damagescale-${source}.glb`}
-              />
+              <>
+                <ModelViewer
+                  src={artifactUrl(jobId, "model")}
+                  downloadName={`damagescale-${source}.glb`}
+                />
+                {analysisId !== null ? (
+                  <p className="flex flex-wrap items-center gap-3">
+                    <Button
+                      variant="ghost"
+                      disabled={keepState === "saving" || keepState === "kept"}
+                      onClick={() => void keep()}
+                    >
+                      {t(`model3d.keep.${keepState === "kept" ? "kept" : "action"}`)}
+                    </Button>
+                    <span className="text-xs text-muted">
+                      {t(`model3d.keep.${keepState === "failed" ? "failed" : "hint"}`)}
+                    </span>
+                  </p>
+                ) : null}
+              </>
             ) : null}
             {state.status === "error" ? (
               <p role="alert" className="text-sm text-hazard">

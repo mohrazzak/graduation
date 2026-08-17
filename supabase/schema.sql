@@ -40,6 +40,11 @@ create policy "own rows insert" on public.analyses
   for insert with check (auth.uid() = user_id);
 create policy "own rows delete" on public.analyses
   for delete using (auth.uid() = user_id);
+-- Update is needed because the restore pipeline attaches a 3D model (and later
+-- a repaired image) to a row that already exists. WITH CHECK stops an owner
+-- reassigning user_id on update.
+create policy "own rows update" on public.analyses
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- Storage: create PRIVATE bucket "analysis-images".
 -- Files are stored at: {user_id}/{analysis_id}.jpg  and  {user_id}/{analysis_id}_heatmap.png

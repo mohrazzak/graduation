@@ -187,6 +187,43 @@ export async function getSignedUrl(path: string): Promise<Result<string>> {
   return { data: data.signedUrl, error: null };
 }
 
+// Attaches a generated 3D model to an existing analysis: uploads the GLB and
+// records its path on the row. Explicit rather than automatic — a GLB is 9-17 MB
+// against a 1 GB bucket, so the user decides which ones are worth keeping.
+export async function attachModel3d(
+  analysisId: string,
+  glb: Blob,
+): Promise<Result<string>> {
+  if (!isSupabaseConfigured()) {
+    return { data: null, error: "not_configured" };
+  }
+  const supabase = getSupabaseBrowserClient();
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id;
+  if (!userId) {
+    return { data: null, error: "not_authenticated" };
+  }
+
+  const path = `${userId}/${analysisId}.glb`;
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, glb, { contentType: "model/gltf-binary", upsert: true });
+  if (uploadError) {
+    return { data: null, error: "upload_failed" };
+  }
+
+  const { error: updateError } = await supabase
+    .from("analyses")
+    .update({ model3d_path: path })
+    .eq("id", analysisId);
+  if (updateError) {
+    // Do not leave a stored object the row cannot reference.
+    await removeQuietly(supabase, [path]);
+    return { data: null, error: "save_failed" };
+  }
+  return { data: path, error: null };
+}
+
 // Best-effort cleanup. Failures are swallowed on purpose: the caller is
 // already returning the primary error, and a leftover object inside the
 // user's own RLS-scoped folder is harmless next to a second confusing error.

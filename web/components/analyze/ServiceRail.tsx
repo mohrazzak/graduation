@@ -18,9 +18,16 @@ export interface ServiceRailProps {
   file: File;
   tier: TierCode;
   sourceSrc: string | null;
+  /** Row generated artifacts attach to; null until the analysis has saved. */
+  analysisId: string | null;
 }
 
-export function ServiceRail({ file, tier, sourceSrc }: ServiceRailProps) {
+export function ServiceRail({
+  file,
+  tier,
+  sourceSrc,
+  analysisId,
+}: ServiceRailProps) {
   const t = useTranslations();
   const policy = policyFor(tier);
   const [repairedJobId, setRepairedJobId] = useState<string | null>(null);
@@ -69,6 +76,7 @@ export function ServiceRail({ file, tier, sourceSrc }: ServiceRailProps) {
 
       <ModelPanel
         file={file}
+        analysisId={analysisId}
         repairedJobId={repairedJobId}
         primary={policy.model3dPrimary}
       />
