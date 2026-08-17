@@ -62,13 +62,10 @@ def control_edges(
     gray = image.convert("L").resize(size, Image.Resampling.LANCZOS)
     try:
         import cv2
+    except ImportError as exc:
+        raise RuntimeError("opencv_required") from exc
 
-        edges = cv2.Canny(np.asarray(gray), 100, 200)
-    except ImportError:
-        # Keep the helper usable in the API environment when optional OpenCV is
-        # absent.  The worker's pinned environment uses the exact Canny path.
-        edges = np.asarray(gray.filter(ImageFilter.FIND_EDGES))
-        edges = np.where(edges >= 100, 255, 0).astype(np.uint8)
+    edges = cv2.Canny(np.asarray(gray), 100, 200)
 
     repair_pixels = np.asarray(_resize_mask(mask, size), dtype=np.uint8) > 127
     edges = np.where(repair_pixels, 0, edges).astype(np.uint8)
@@ -91,5 +88,10 @@ def composite_generated(
     repaired = generated.convert("RGB").resize(source.size, Image.Resampling.LANCZOS)
     # A small feather softens the seam while leaving pixels well outside the
     # requested region unchanged (important for the surrounding scene).
-    feathered = _resize_mask(mask, source.size).filter(ImageFilter.GaussianBlur(2))
+    resized_mask = _resize_mask(mask, source.size)
+    blurred_mask = np.asarray(resized_mask.filter(ImageFilter.GaussianBlur(2)))
+    # Feathering softens only the interior edge; never let alpha bleed beyond
+    # the hard repair footprint into surrounding source pixels.
+    footprint = np.asarray(resized_mask) > 0
+    feathered = Image.fromarray(np.where(footprint, blurred_mask, 0).astype(np.uint8))
     return Image.composite(repaired, source, feathered)
