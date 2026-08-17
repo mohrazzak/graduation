@@ -181,6 +181,7 @@ export function AnalyzeClient() {
             tier={prediction.tier}
             sourceSrc={previewUrl}
             analysisId={analysisId}
+            analysisStatus={saveStatus}
           />
         ) : null}
         {phase === "done" && saveError !== null ? (

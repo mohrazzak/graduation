@@ -322,6 +322,14 @@
       "job_expired": "That restoration expired. Run it again."
     }
   },
+  "artifactSave": {
+    "waiting": "Waiting for this analysis to finish saving before storing this result.",
+    "saving": "Saving this generated result to your history...",
+    "saved": "Saved to your history.",
+    "blocked": "This analysis could not be saved, so this generated result cannot be stored.",
+    "failed": "Could not save this generated result. Please retry.",
+    "retry": "Retry save"
+  },
   "model3d": {
     "title": "3D reconstruction",
     "intro": "Turn the photo into a textured 3D model you can orbit, inspect, and download.",
@@ -351,12 +359,6 @@
       "aborted": "Reconstruction was cancelled.",
       "job_expired": "That reconstruction expired. Run it again."
     },
-    "fixtureNotice": "Pre-generated example — this is a stored 3D model of this sample photo, produced earlier by the same service. It is not a live result of the run above.",
-    "keep": {
-      "action": "Keep this model",
-      "kept": "Model saved",
-      "hint": "Models are large, so they are only stored when you ask.",
-      "failed": "Could not save the model. Try again."
-    }
+    "fixtureNotice": "Pre-generated example — this is a stored 3D model of this sample photo, produced earlier by the same service. It is not a live result of the run above."
   }
 }

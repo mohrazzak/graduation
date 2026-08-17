@@ -13,6 +13,7 @@ import { policyFor } from "@/lib/services";
 import type { TierCode } from "@/lib/tiers";
 import { ModelPanel } from "./ModelPanel";
 import { RepairPanel } from "./RepairPanel";
+import type { SaveStatus } from "./useSaveAnalysis";
 
 export interface ServiceRailProps {
   file: File;
@@ -20,6 +21,8 @@ export interface ServiceRailProps {
   sourceSrc: string | null;
   /** Row generated artifacts attach to; null until the analysis has saved. */
   analysisId: string | null;
+  /** Base analysis save lifecycle, shared with generated-artifact saves. */
+  analysisStatus: SaveStatus;
 }
 
 export function ServiceRail({
@@ -27,6 +30,7 @@ export function ServiceRail({
   tier,
   sourceSrc,
   analysisId,
+  analysisStatus,
 }: ServiceRailProps) {
   const t = useTranslations();
   const policy = policyFor(tier);
@@ -46,6 +50,7 @@ export function ServiceRail({
             tier={tier}
             sourceSrc={sourceSrc}
             analysisId={analysisId}
+            analysisStatus={analysisStatus}
             onRepaired={setRepairedJobId}
           />
         ) : (
@@ -78,6 +83,7 @@ export function ServiceRail({
       <ModelPanel
         file={file}
         analysisId={analysisId}
+        analysisStatus={analysisStatus}
         repairedJobId={repairedJobId}
         primary={policy.model3dPrimary}
       />

@@ -7,16 +7,19 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { CornerTicks } from "@/components/ui/CornerTicks";
 import { model3dFixtureFor } from "@/lib/fixtures";
-import { attachArtifact } from "@/lib/supabase/queries";
 import { artifactUrl, startModel3d } from "@/lib/jobs";
+import { ArtifactPersistenceNote } from "./ArtifactPersistenceNote";
 import { ModelViewer } from "./ModelViewer";
 import { StageProgress } from "./StageProgress";
+import { useArtifactPersistence } from "./useArtifactPersistence";
 import { useJob } from "./useJob";
+import type { SaveStatus } from "./useSaveAnalysis";
 
 export interface ModelPanelProps {
   file: File;
-  /** Row to attach a kept model to; null until the analysis has saved. */
+  /** Row to attach a generated model to; null until the analysis has saved. */
   analysisId: string | null;
+  analysisStatus: SaveStatus;
   /** Set once a restoration finished, enabling the "from repaired" source. */
   repairedJobId: string | null;
   primary: boolean;
@@ -27,33 +30,13 @@ const STAGE_KEYS = ["uploading", "reconstructing", "downloading"] as const;
 export function ModelPanel({
   file,
   analysisId,
+  analysisStatus,
   repairedJobId,
   primary,
 }: ModelPanelProps) {
   const t = useTranslations();
   const { jobId, state, running, start } = useJob();
   const [source, setSource] = useState<"original" | "repaired">("original");
-  // Keeping a model is explicit: a GLB is 9-17 MB against a 1 GB bucket, so the
-  // user decides which are worth storing rather than every run filling it.
-  const [keepState, setKeepState] = useState<"idle" | "saving" | "kept" | "failed">(
-    "idle",
-  );
-
-  async function keep(): Promise<void> {
-    if (jobId === null || analysisId === null) return;
-    setKeepState("saving");
-    try {
-      const response = await fetch(artifactUrl(jobId, "model"));
-      const { error } = await attachArtifact(
-        analysisId,
-        "model3d",
-        await response.blob(),
-      );
-      setKeepState(error === null ? "kept" : "failed");
-    } catch {
-      setKeepState("failed");
-    }
-  }
 
   async function run(from: "original" | "repaired"): Promise<void> {
     setSource(from);
@@ -65,6 +48,13 @@ export function ModelPanel({
   }
 
   const model = state?.artifacts.includes("model") ?? false;
+  const { status: artifactSaveStatus, retry: retryArtifactSave } = useArtifactPersistence({
+    analysisId,
+    analysisStatus,
+    jobId,
+    ready: model,
+    kind: "model3d",
+  });
   // When the service is simply out of credit, fall back to a pre-generated
   // model of THIS photo if one exists — clearly labelled, never passed off
   // as live output.
@@ -113,20 +103,10 @@ export function ModelPanel({
                   src={artifactUrl(jobId, "model")}
                   downloadName={`damagescale-${source}.glb`}
                 />
-                {analysisId !== null ? (
-                  <p className="flex flex-wrap items-center gap-3">
-                    <Button
-                      variant="ghost"
-                      disabled={keepState === "saving" || keepState === "kept"}
-                      onClick={() => void keep()}
-                    >
-                      {t(`model3d.keep.${keepState === "kept" ? "kept" : "action"}`)}
-                    </Button>
-                    <span className="text-xs text-muted">
-                      {t(`model3d.keep.${keepState === "failed" ? "failed" : "hint"}`)}
-                    </span>
-                  </p>
-                ) : null}
+                <ArtifactPersistenceNote
+                  status={artifactSaveStatus}
+                  onRetry={retryArtifactSave}
+                />
               </>
             ) : null}
             {state.status === "error" ? (
