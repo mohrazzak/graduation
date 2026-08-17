@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { DAMAGE_TIERS, getTier } from "../tiers";
 import type { Analysis, Prediction, TierProbabilities } from "../types";
 import { isSupabaseConfigured } from "./auth";
+import { attachArtifactWithOperations } from "./artifactAttachment.mts";
 import { getSupabaseBrowserClient } from "./client";
 import type { Database } from "./database.types";
 
@@ -223,27 +224,63 @@ export async function attachArtifact(
 
   const spec = ARTIFACT_SPEC[kind];
   const path = `${userId}/${analysisId}${spec.extension}`;
-  const { error: uploadError } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, blob, { contentType: spec.contentType, upsert: true });
-  if (uploadError) {
-    return { data: null, error: "upload_failed" };
+  const attachment = await attachArtifactWithOperations({
+    path,
+    blob,
+    contentType: spec.contentType,
+    operations: {
+      readCurrentPath: async () => {
+        const { data: row, error } = await supabase
+          .from("analyses")
+          .select("repaired_path, model3d_path")
+          .eq("id", analysisId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (error || row === null) {
+          return { ok: false };
+        }
+        return {
+          ok: true,
+          path: kind === "repaired" ? row.repaired_path : row.model3d_path,
+        };
+      },
+      upload: async (uploadPath, uploadBlob, contentType) => {
+        const { error } = await supabase.storage
+          .from(BUCKET)
+          .upload(uploadPath, uploadBlob, { contentType, upsert: true });
+        return !error;
+      },
+      updatePath: async (updatePath) => {
+        // Named explicitly rather than via a computed key: a computed key widens the
+        // patch to a string index signature and loses postgrest's column checking.
+        const patch =
+          kind === "repaired"
+            ? { repaired_path: updatePath }
+            : { model3d_path: updatePath };
+        const { data, error } = await supabase
+          .from("analyses")
+          .update(patch)
+          .eq("id", analysisId)
+          .eq("user_id", userId)
+          .select("id")
+          .single();
+        return !error && data !== null;
+      },
+      remove: async (removePath) => {
+        const { error } = await supabase.storage.from(BUCKET).remove([removePath]);
+        if (error) {
+          throw error;
+        }
+      },
+    },
+  });
+  if (!attachment.ok) {
+    return {
+      data: null,
+      error: attachment.stage === "upload" ? "upload_failed" : "save_failed",
+    };
   }
-
-  // Named explicitly rather than via a computed key: a computed key widens the
-  // patch to a string index signature and loses postgrest's column checking.
-  const patch =
-    kind === "repaired" ? { repaired_path: path } : { model3d_path: path };
-  const { error: updateError } = await supabase
-    .from("analyses")
-    .update(patch)
-    .eq("id", analysisId);
-  if (updateError) {
-    // Do not leave a stored object the row cannot reference.
-    await removeQuietly(supabase, [path]);
-    return { data: null, error: "save_failed" };
-  }
-  return { data: path, error: null };
+  return { data: attachment.path, error: null };
 }
 
 // Best-effort cleanup. Failures are swallowed on purpose: the caller is
