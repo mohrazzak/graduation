@@ -117,6 +117,18 @@ def test_download_glb_accepts_the_permitted_v2_chunk_order(
         ("invalid UTF-8 JSON", _glb_chunks((JSON_CHUNK, b'"\xff" '))),
         ("invalid JSON", _glb_chunks((JSON_CHUNK, b"{]  "))),
         (
+            "NaN JSON constant",
+            _glb_chunks((JSON_CHUNK, _padded_json(b'{"value":NaN}'))),
+        ),
+        (
+            "Infinity JSON constant",
+            _glb_chunks((JSON_CHUNK, _padded_json(b'{"value":Infinity}'))),
+        ),
+        (
+            "negative Infinity JSON constant",
+            _glb_chunks((JSON_CHUNK, _padded_json(b'{"value":-Infinity}'))),
+        ),
+        (
             "BIN before JSON",
             _glb_chunks(
                 (BIN_CHUNK, b"\x00\x00\x00\x00"),

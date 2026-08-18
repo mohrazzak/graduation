@@ -37,6 +37,10 @@ class Model3DUnavailable(RuntimeError):
     """Raised when 3D reconstruction cannot run (no key, quota, or failure)."""
 
 
+def _reject_json_constant(_constant: str) -> None:
+    raise ValueError("non-standard JSON constant")
+
+
 def _is_valid_glb(glb: bytes) -> bool:
     """Accept one JSON chunk followed by at most one BIN chunk in a GLB v2."""
     if len(glb) < _GLB_MIN_BYTES or glb[:4] != b"glTF":
@@ -73,8 +77,11 @@ def _is_valid_glb(glb: bytes) -> bool:
     if offset != len(glb) or chunk_count not in (1, 2) or json_chunk is None:
         return False
     try:
-        document = json.loads(json_chunk.decode("utf-8", errors="strict"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
+        document = json.loads(
+            json_chunk.decode("utf-8", errors="strict"),
+            parse_constant=_reject_json_constant,
+        )
+    except (UnicodeDecodeError, ValueError):
         return False
     return isinstance(document, dict)
 
