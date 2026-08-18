@@ -32,16 +32,45 @@ const validPng = Buffer.from(
   "base64",
 );
 
-const validGlb = (() => {
-  const bytes = Buffer.alloc(24);
+const jsonChunkType = 0x4e4f534a;
+const binChunkType = 0x004e4942;
+
+const paddedJson = (value) => {
+  const bytes = Buffer.from(value, "utf8");
+  const padding = (4 - (bytes.length % 4)) % 4;
+  return Buffer.concat([bytes, Buffer.alloc(padding, 0x20)]);
+};
+
+const glbBody = (body) => {
+  const bytes = Buffer.alloc(12 + body.length);
   bytes.write("glTF", 0, "ascii");
   bytes.writeUInt32LE(2, 4);
   bytes.writeUInt32LE(bytes.length, 8);
-  bytes.writeUInt32LE(4, 12);
-  bytes.write("JSON", 16, "ascii");
-  bytes.write("{}  ", 20, "ascii");
+  body.copy(bytes, 12);
   return bytes;
-})();
+};
+
+const glbChunks = (...chunks) =>
+  glbBody(
+    Buffer.concat(
+      chunks.map(([type, payload]) => {
+        const chunk = Buffer.alloc(8 + payload.length);
+        chunk.writeUInt32LE(payload.length, 0);
+        chunk.writeUInt32LE(type, 4);
+        payload.copy(chunk, 8);
+        return chunk;
+      }),
+    ),
+  );
+
+const validGlb = glbChunks([
+  jsonChunkType,
+  paddedJson('{"asset":{"version":"2.0"}}'),
+]);
+const validGlbWithBin = glbChunks(
+  [jsonChunkType, paddedJson('{"asset":{"version":"2.0"}}')],
+  [binChunkType, Buffer.from([1, 2, 3, 0])],
+);
 
 test("waits for the base analysis id before saving a ready artifact", () => {
   const saveCalls = [];
@@ -304,6 +333,90 @@ test("normalizes response media types and returns non-empty blobs", async () => 
       }),
   );
   assert.deepEqual(Buffer.from(await glb.arrayBuffer()), validGlb);
+});
+
+test("accepts the permitted GLB v2 JSON and optional BIN chunk order", async () => {
+  for (const expected of [validGlb, validGlbWithBin]) {
+    const glb = await fetchArtifactBlob(
+      "/jobs/1/artifact/model",
+      "model/gltf-binary",
+      async () =>
+        new Response(expected, {
+          headers: { "content-type": "model/gltf-binary" },
+        }),
+    );
+    assert.deepEqual(Buffer.from(await glb.arrayBuffer()), expected);
+  }
+});
+
+test("rejects invalid GLB v2 container framing, JSON, and chunk ordering", async () => {
+  const truncatedChunkHeader = Buffer.concat([
+    validGlb,
+    Buffer.from([0, 0, 0, 0]),
+  ]);
+  truncatedChunkHeader.writeUInt32LE(truncatedChunkHeader.length, 8);
+
+  const invalidContainers = [
+    ["header only", glbBody(Buffer.alloc(0))],
+    ["truncated chunk header", truncatedChunkHeader],
+    [
+      "chunk data overrun",
+      glbBody(Buffer.concat([
+        Buffer.from([8, 0, 0, 0, 0x4a, 0x53, 0x4f, 0x4e]),
+        Buffer.from("{}  ", "ascii"),
+      ])),
+    ],
+    [
+      "unaligned chunk",
+      glbBody(Buffer.concat([
+        Buffer.from([3, 0, 0, 0, 0x4a, 0x53, 0x4f, 0x4e]),
+        Buffer.from("{} ", "ascii"),
+      ])),
+    ],
+    ["invalid UTF-8 JSON", glbChunks([jsonChunkType, Buffer.from([0x22, 0xff, 0x22, 0x20])])],
+    ["invalid JSON", glbChunks([jsonChunkType, Buffer.from("{]  ", "ascii")])],
+    [
+      "BIN before JSON",
+      glbChunks(
+        [binChunkType, Buffer.alloc(4)],
+        [jsonChunkType, paddedJson("{}")],
+      ),
+    ],
+    [
+      "duplicate JSON",
+      glbChunks(
+        [jsonChunkType, paddedJson("{}")],
+        [jsonChunkType, paddedJson("{}")],
+      ),
+    ],
+    [
+      "unknown chunk",
+      glbChunks(
+        [jsonChunkType, paddedJson("{}")],
+        [0x12345678, Buffer.alloc(4)],
+      ),
+    ],
+    [
+      "extra BIN chunk",
+      glbChunks(
+        [jsonChunkType, paddedJson("{}")],
+        [binChunkType, Buffer.alloc(4)],
+        [binChunkType, Buffer.alloc(4)],
+      ),
+    ],
+  ];
+
+  for (const [description, bytes] of invalidContainers) {
+    await assert.rejects(
+      fetchArtifactBlob("/jobs/1/artifact/model", "model/gltf-binary", async () =>
+        new Response(bytes, {
+          headers: { "content-type": "model/gltf-binary" },
+        }),
+      ),
+      /valid GLB/,
+      description,
+    );
+  }
 });
 
 test("rejects corrupt artifacts even when their media type is correct", async () => {

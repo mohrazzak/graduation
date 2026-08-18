@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useReducedMotion } from "framer-motion";
+import { loadModelViewerModule } from "@/lib/modelViewerLoader.mts";
 
 export interface ModelViewerProps {
   /** URL of the GLB to display. */
@@ -32,15 +33,15 @@ export function ModelViewer({ src, downloadName, onError }: ModelViewerProps) {
 
   // Loaded on demand rather than in the bundle: nobody who never reconstructs a
   // building should pay for the viewer.
-  useEffect(() => {
-    let cancelled = false;
-    void import("@google/model-viewer")
-      .then(() => !cancelled && setReady(true))
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useEffect(
+    () =>
+      loadModelViewerModule(
+        () => import("@google/model-viewer"),
+        () => setReady(true),
+        () => onErrorRef.current?.(),
+      ),
+    [],
+  );
 
   // WHY the element is created ONCE and then mutated, never re-created:
   // <model-viewer> starts fetching and parsing the GLB the moment it is

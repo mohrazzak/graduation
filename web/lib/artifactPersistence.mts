@@ -446,7 +446,7 @@ function pngCrc32(bytes: Uint8Array, start: number, end: number): number {
 }
 
 function isValidGlb(bytes: Uint8Array): boolean {
-  if (bytes.byteLength < 20 || ascii(bytes, 0, 4) !== "glTF") return false;
+  if (bytes.byteLength < 24 || ascii(bytes, 0, 4) !== "glTF") return false;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (view.getUint32(4, true) !== 2 || view.getUint32(8, true) !== bytes.byteLength) {
     return false;
@@ -454,17 +454,33 @@ function isValidGlb(bytes: Uint8Array): boolean {
 
   let offset = 12;
   let chunkIndex = 0;
+  let jsonChunk: Uint8Array | null = null;
   while (offset < bytes.byteLength) {
     if (offset + 8 > bytes.byteLength) return false;
     const chunkLength = view.getUint32(offset, true);
     const chunkType = view.getUint32(offset + 4, true);
     const nextOffset = offset + 8 + chunkLength;
     if (chunkLength % 4 !== 0 || nextOffset > bytes.byteLength) return false;
-    if (chunkIndex === 0 && chunkType !== 0x4e4f534a) return false;
+    if (chunkIndex === 0) {
+      if (chunkType !== 0x4e4f534a) return false;
+      jsonChunk = bytes.subarray(offset + 8, nextOffset);
+    } else if (chunkIndex === 1) {
+      if (chunkType !== 0x004e4942) return false;
+    } else {
+      return false;
+    }
     offset = nextOffset;
     chunkIndex += 1;
   }
-  return chunkIndex > 0 && offset === bytes.byteLength;
+  if (chunkIndex < 1 || chunkIndex > 2 || offset !== bytes.byteLength || jsonChunk === null) {
+    return false;
+  }
+  try {
+    const document = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(jsonChunk));
+    return document !== null && typeof document === "object" && !Array.isArray(document);
+  } catch {
+    return false;
+  }
 }
 
 function ascii(bytes: Uint8Array, start: number, length: number): string {

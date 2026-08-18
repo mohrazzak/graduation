@@ -28,14 +28,59 @@ _POLL_SECONDS = 3
 _MAX_POLL_SECONDS = 300
 _MAX_GLB_BYTES = 32 * 1024 * 1024
 _DOWNLOAD_CHUNK_BYTES = 64 * 1024
+_GLB_MIN_BYTES = 24
+_GLB_JSON_CHUNK = 0x4E4F534A
+_GLB_BIN_CHUNK = 0x004E4942
 
 
 class Model3DUnavailable(RuntimeError):
     """Raised when 3D reconstruction cannot run (no key, quota, or failure)."""
 
 
+def _is_valid_glb(glb: bytes) -> bool:
+    """Accept one JSON chunk followed by at most one BIN chunk in a GLB v2."""
+    if len(glb) < _GLB_MIN_BYTES or glb[:4] != b"glTF":
+        return False
+    version, encoded_length = struct.unpack_from("<II", glb, 4)
+    if version != 2 or encoded_length != len(glb):
+        return False
+
+    json_chunk: bytes | None = None
+    chunk_count = 0
+    offset = 12
+    while offset < len(glb):
+        if len(glb) - offset < 8:
+            return False
+        chunk_length, chunk_type = struct.unpack_from("<II", glb, offset)
+        if chunk_length % 4 != 0:
+            return False
+        data_start = offset + 8
+        data_end = data_start + chunk_length
+        if data_end > len(glb):
+            return False
+        if chunk_count == 0:
+            if chunk_type != _GLB_JSON_CHUNK:
+                return False
+            json_chunk = glb[data_start:data_end]
+        elif chunk_count == 1:
+            if chunk_type != _GLB_BIN_CHUNK:
+                return False
+        else:
+            return False
+        offset = data_end
+        chunk_count += 1
+
+    if offset != len(glb) or chunk_count not in (1, 2) or json_chunk is None:
+        return False
+    try:
+        document = json.loads(json_chunk.decode("utf-8", errors="strict"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return isinstance(document, dict)
+
+
 def _download_glb(url: str) -> bytes:
-    """Stream one bounded Tripo result and require its GLB v2 header contract."""
+    """Stream one bounded Tripo result and require a complete GLB v2 container."""
     with urllib.request.urlopen(url, timeout=300) as response:
         declared_length = response.headers.get("content-length")
         if declared_length is not None:
@@ -58,10 +103,7 @@ def _download_glb(url: str) -> bytes:
             chunks.append(chunk)
 
     glb = b"".join(chunks)
-    if len(glb) < 12 or glb[:4] != b"glTF":
-        raise Model3DUnavailable("backend_error")
-    version, encoded_length = struct.unpack_from("<II", glb, 4)
-    if version != 2 or encoded_length != len(glb):
+    if not _is_valid_glb(glb):
         raise Model3DUnavailable("backend_error")
     return glb
 
