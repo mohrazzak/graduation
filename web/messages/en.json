@@ -319,6 +319,7 @@
       "backend_error": "The restoration service did not respond. Try again in a moment.",
       "no_image_returned": "The model returned no image for this photo. Try editing the instruction, or use a different photo.",
       "timed_out": "Restoration took too long and was stopped.",
+      "invalid_repair_backend": "The repair backend is configured incorrectly. Ask the server operator to fix it, then retry.",
       "local_dependency_missing": "The local repair model is not installed on this server. Configure its GPU environment, then retry.",
       "local_gpu_unavailable": "The local repair model needs a CUDA GPU, but none is available on this server.",
       "local_model_unavailable": "The local repair weights could not be loaded. Check the model cache or connection, then retry.",

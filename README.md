@@ -148,6 +148,47 @@ python3 -m venv .venv
 MOCK_MODE=true .venv/bin/uvicorn main:app --reload --port 8000
 ```
 
+### Optional native CUDA repair backend
+
+Real local ControlNet repair is supported when the API runs natively on a
+Linux CUDA host. Keep its heavyweight environment outside this repository and
+separate from the base API environment. Replace the example absolute path with
+a writable location for the API service user:
+
+```bash
+REPAIR_VENV_PATH=/opt/damagescale/venvs/repair
+python3 -m venv "$REPAIR_VENV_PATH"
+"$REPAIR_VENV_PATH/bin/python" -m pip install --upgrade pip
+"$REPAIR_VENV_PATH/bin/python" -m pip install \
+  --index-url https://download.pytorch.org/whl/cu130 \
+  torch==2.12.0+cu130
+"$REPAIR_VENV_PATH/bin/python" -m pip install -r api/requirements-repair.txt
+```
+
+Start the lightweight API process with the external interpreter selected:
+
+```bash
+cd api
+REPAIR_BACKEND=local-controlnet \
+LOCAL_REPAIR_PYTHON=/opt/damagescale/venvs/repair/bin/python \
+LOCAL_REPAIR_TIMEOUT_SECONDS=900 \
+.venv/bin/uvicorn main:app --reload --port 8000
+```
+
+`LOCAL_REPAIR_PYTHON` may be blank to select the documented
+`api/.venv-repair/bin/python` default; every nonblank value must be absolute.
+The first run downloads the pinned model weights and can take several minutes.
+Linux workers serialize model loading and inference through an owner-only host
+file lock so concurrent API processes do not occupy the 4 GB GPU together.
+
+Both Compose files forward `REPAIR_BACKEND`, `LOCAL_REPAIR_PYTHON`, and
+`LOCAL_REPAIR_TIMEOUT_SECONDS`, but the stock API image intentionally contains
+neither CUDA Torch nor the optional model dependencies and does not mount a GPU
+or external environment. Its supported behavior is `auto`/Gemini fallback (or
+an honest local-dependency error when local mode is forced). Use the native API
+setup above for real local ControlNet execution; do not put API keys or model
+tokens in the repository.
+
 Quality gates (all must pass):
 
 ```bash

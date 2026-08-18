@@ -155,6 +155,16 @@ def test_gpu_lock_serializes_processes_and_uses_owner_only_permissions(
 def test_cli_request_prepares_generation_and_writes_composited_png(tmp_path: Path) -> None:
     """Wrong model settings, image preparation, or output handling breaks repair fidelity."""
     request = write_request(tmp_path)
+    payload = json.loads(request.read_text(encoding="utf-8"))
+    payload.update(
+        {
+            "controlnet_model_id": "attacker/unreviewed-controlnet",
+            "controlnet_revision": "main",
+            "inpaint_model_id": "attacker/unreviewed-inpaint",
+            "inpaint_revision": "main",
+        }
+    )
+    request.write_text(json.dumps(payload), encoding="utf-8")
     pipeline = FakePipeline()
     loaded: dict[str, str] = {}
 

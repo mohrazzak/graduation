@@ -9,6 +9,9 @@ services:
     environment:
       MOCK_MODE: ${MOCK_MODE:-true}
       CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS in .env}
+      REPAIR_BACKEND: ${REPAIR_BACKEND:-auto}
+      LOCAL_REPAIR_PYTHON: ${LOCAL_REPAIR_PYTHON:-}
+      LOCAL_REPAIR_TIMEOUT_SECONDS: ${LOCAL_REPAIR_TIMEOUT_SECONDS:-900}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s

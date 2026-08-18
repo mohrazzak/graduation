@@ -165,6 +165,24 @@ def test_repair_reports_named_local_failure_for_malformed_worker_output(
     assert body["detail"] == "local_generation_failed"
 
 
+def test_invalid_repair_backend_is_a_stable_job_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A deployment typo must fail closed without losing preparation artifacts."""
+    monkeypatch.setenv("REPAIR_BACKEND", "controlnet")
+    job_id = client.post(
+        "/jobs/repair", files=_files(), data={"tier": "GC"}
+    ).json()["job_id"]
+
+    body = _wait(client, job_id)
+
+    assert body["status"] == "error"
+    assert body["detail"] == "invalid_repair_backend"
+    assert "mask" in body["artifacts"]
+    assert "edges" in body["artifacts"]
+    assert "repaired" not in body["artifacts"]
+
+
 @pytest.mark.parametrize(
     "reason",
     (

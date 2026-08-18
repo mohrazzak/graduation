@@ -15,6 +15,7 @@
 - Never import Diffusers from the FastAPI process; only the worker interpreter imports it.
 - Never use `shell=True`; request values must not become executable command text.
 - The local worker accepts only trusted temporary files written by the API and emits one validated PNG.
+- Keep pinned model identifiers and revisions hardcoded inside the isolated worker; never place them in request JSON.
 - `REPAIR_BACKEND=auto` is local-first with Gemini fallback; forced local never falls back.
 - The base API/Docker dependency set remains lightweight; local generation stays optional.
 - Both English and Arabic receive identical new message leaves.
@@ -283,7 +284,7 @@ git commit -m "feat(api): invoke isolated local repair worker"
 
 - [ ] **Step 1: Write worker tests without loading weights**
 
-Inject a fake loader/pipeline into `run_request()`. Prove relative/malformed/out-of-directory paths fail; pinned model identifiers reach the loader; all three images are 512 square; 30 steps, guidance 9.5, ControlNet scale 0.5, negative prompt, and deterministic seed reach the pipeline; the result is composited at original size and saved as PNG; a safety-checker flag fails closed.
+Inject a fake loader/pipeline into `run_request()`. Prove relative/malformed/out-of-directory paths fail; request JSON cannot supply model identifiers; the worker's hardcoded pinned identifiers reach the loader; all three images are 512 square; 30 steps, guidance 9.5, ControlNet scale 0.5, negative prompt, and deterministic seed reach the pipeline; the result is composited at original size and saved as PNG; a safety-checker flag fails closed.
 
 - [ ] **Step 2: Run RED**
 

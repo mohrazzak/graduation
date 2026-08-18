@@ -30,6 +30,9 @@ services:
       # stages (building mask, edge map) and report a named reason for the rest.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       TRIPO_API_KEY: ${TRIPO_API_KEY:-}
+      REPAIR_BACKEND: ${REPAIR_BACKEND:-auto}
+      LOCAL_REPAIR_PYTHON: ${LOCAL_REPAIR_PYTHON:-}
+      LOCAL_REPAIR_TIMEOUT_SECONDS: ${LOCAL_REPAIR_TIMEOUT_SECONDS:-900}
       RESNET_WEIGHTS_PATH: ${RESNET_WEIGHTS_PATH:-}
       YOLO_WEIGHTS_PATH: ${YOLO_WEIGHTS_PATH:-}
       RAED_WEIGHTS_PATH: ${RAED_WEIGHTS_PATH:-}

@@ -42,8 +42,13 @@ temporary directory contains only:
 
 - `input.png`: decoded source normalized to RGB PNG;
 - `mask.png`: the raw building mask already produced by the repair pipeline;
-- `request.json`: prompt, tier, seed, pinned model identifiers, and output path;
+- `request.json`: prompt, tier, seed, and output path;
 - `repaired.png`: the worker's only required output.
+
+Pinned model identifiers and revisions are deliberately absent from
+`request.json`. They are hardcoded only inside the isolated worker, so neither
+the browser-facing request nor the FastAPI adapter can redirect model loading
+to unreviewed weights.
 
 No untrusted request value becomes a shell command. The adapter uses
 `subprocess.run()` with an argument list, a timeout, captured output, and no
@@ -68,7 +73,7 @@ The provider returns PNG bytes. The existing `repaired` artifact remains
 
 ### Worker model contract
 
-The worker uses these immutable model revisions:
+The worker hardcodes these immutable model revisions inside its isolated module:
 
 - inpainting:
   `stable-diffusion-v1-5/stable-diffusion-inpainting@8a4288a76071f7280aedbdb3253bdb9e9d5d84bb`;
