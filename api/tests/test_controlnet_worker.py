@@ -9,13 +9,20 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
 from PIL import Image
 
-from repair.controlnet_worker import WorkerError, main, run_request
+from repair.controlnet_worker import (
+    RuntimePolicy,
+    WorkerError,
+    _load_pipeline,
+    main,
+    run_request,
+    runtime_policy,
+)
 
 
 def _hold_gpu_lock(lock_path: str, acquired: object, release: object) -> None:
@@ -37,13 +44,23 @@ class FakePipeline:
         self.safety_checker = object()
         self.safety_flags = safety_flags
         self.offload_enabled = False
+        self.events: list[str] = []
         self.calls: list[dict[str, Any]] = []
 
     def enable_model_cpu_offload(self) -> None:
         self.offload_enabled = True
+        self.events.append("model_cpu_offload")
+
+    def enable_sequential_cpu_offload(self) -> None:
+        self.offload_enabled = True
+        self.events.append("sequential_cpu_offload")
+
+    def enable_attention_slicing(self) -> None:
+        self.events.append("attention_slicing")
 
     def __call__(self, **kwargs: Any) -> SimpleNamespace:
         assert self.offload_enabled, "inference ran before CPU offload was enabled"
+        self.events.append("inference")
         self.calls.append(kwargs)
         return SimpleNamespace(
             images=[Image.new("RGB", (512, 512), "blue")],
@@ -102,6 +119,84 @@ def test_module_import_does_not_import_torch_or_diffusers() -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_gtx_16xx_capability_75_uses_the_finite_fp32_policy() -> None:
+    """The affected GPU family must not use the fp16 path that produces NaNs."""
+    assert runtime_policy("NVIDIA GeForce GTX 1650 Ti", (7, 5)) == RuntimePolicy(
+        precision="float32",
+        offload="sequential",
+        attention_slicing=True,
+    )
+    assert runtime_policy("NVIDIA GeForce RTX 3060", (8, 6)) == RuntimePolicy(
+        precision="float16",
+        offload="model",
+        attention_slicing=False,
+    )
+
+
+def test_gtx_policy_reaches_model_dtype_and_runtime_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A correct selector is insufficient unless loading and inference honor it."""
+    dtype_calls: list[tuple[str, object]] = []
+    pipeline = FakePipeline()
+
+    class FakeCuda:
+        @staticmethod
+        def get_device_name() -> str:
+            return "NVIDIA GeForce GTX 1650 Ti"
+
+        @staticmethod
+        def get_device_capability() -> tuple[int, int]:
+            return (7, 5)
+
+    fake_torch = SimpleNamespace(
+        cuda=FakeCuda(),
+        float16=object(),
+        float32=object(),
+        Generator=lambda **kwargs: SimpleNamespace(manual_seed=lambda seed: seed),
+    )
+
+    class FakeControlNetModel:
+        @classmethod
+        def from_pretrained(cls, *args: object, **kwargs: object) -> object:
+            dtype_calls.append(("controlnet", kwargs["torch_dtype"]))
+            return object()
+
+    class FakeDiffusersPipeline:
+        @classmethod
+        def from_pretrained(cls, *args: object, **kwargs: object) -> FakePipeline:
+            dtype_calls.append(("pipeline", kwargs["torch_dtype"]))
+            return pipeline
+
+    fake_diffusers = ModuleType("diffusers")
+    fake_diffusers.ControlNetModel = FakeControlNetModel
+    fake_diffusers.StableDiffusionControlNetInpaintPipeline = FakeDiffusersPipeline
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "diffusers", fake_diffusers)
+
+    loaded_pipeline, generator, policy = _load_pipeline(
+        controlnet_model_id="controlnet",
+        controlnet_revision="controlnet-revision",
+        inpaint_model_id="inpaint",
+        inpaint_revision="inpaint-revision",
+    )
+
+    assert dtype_calls == [
+        ("controlnet", fake_torch.float32),
+        ("pipeline", fake_torch.float32),
+    ]
+    request = write_request(tmp_path)
+    run_request(
+        request,
+        loader=lambda **kwargs: (loaded_pipeline, generator, policy),
+    )
+    assert pipeline.events == [
+        "attention_slicing",
+        "sequential_cpu_offload",
+        "inference",
+    ]
 
 
 def test_gpu_lock_serializes_processes_and_uses_owner_only_permissions(
@@ -168,9 +263,9 @@ def test_cli_request_prepares_generation_and_writes_composited_png(tmp_path: Pat
     pipeline = FakePipeline()
     loaded: dict[str, str] = {}
 
-    def loader(**identifiers: str) -> tuple[FakePipeline, Any]:
+    def loader(**identifiers: str) -> tuple[FakePipeline, Any, RuntimePolicy]:
         loaded.update(identifiers)
-        return pipeline, FakeGenerator
+        return pipeline, FakeGenerator, RuntimePolicy("float16", "model", False)
 
     assert main(["--request", str(request)], loader=loader) == 0
 
@@ -308,7 +403,14 @@ def test_safety_result_fails_closed(tmp_path: Path, flags: object) -> None:
     pipeline = FakePipeline(safety_flags=flags)
 
     with pytest.raises(WorkerError, match="local_generation_failed"):
-        run_request(request, loader=lambda **kwargs: (pipeline, FakeGenerator))
+        run_request(
+            request,
+            loader=lambda **kwargs: (
+                pipeline,
+                FakeGenerator,
+                RuntimePolicy("float16", "model", False),
+            ),
+        )
 
     assert not (tmp_path / "repaired.png").exists()
 

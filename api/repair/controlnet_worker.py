@@ -18,7 +18,7 @@ from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from PIL import Image
 
@@ -42,7 +42,27 @@ _PROBE_PACKAGES = ("diffusers", "accelerate", "transformers", "safetensors", "cv
 _GPU_LOCK_PATH = Path("/tmp") / f"damagescale-controlnet-{os.geteuid()}.lock"
 
 GeneratorFactory = Callable[[int], Any]
-PipelineLoader = Callable[..., tuple[Any, GeneratorFactory]]
+OffloadMode = Literal["model", "sequential"]
+Precision = Literal["float16", "float32"]
+
+
+@dataclass(frozen=True)
+class RuntimePolicy:
+    """Precision and memory policy selected from the active CUDA device."""
+
+    precision: Precision
+    offload: OffloadMode
+    attention_slicing: bool
+
+
+PipelineLoader = Callable[..., tuple[Any, GeneratorFactory, RuntimePolicy]]
+
+
+def runtime_policy(device_name: str, capability: tuple[int, int]) -> RuntimePolicy:
+    """Use the finite low-memory path required by GTX 16xx capability 7.5 GPUs."""
+    if capability == (7, 5) and "gtx 16" in device_name.casefold():
+        return RuntimePolicy("float32", "sequential", True)
+    return RuntimePolicy("float16", "model", False)
 
 
 class WorkerError(RuntimeError):
@@ -197,21 +217,26 @@ def _load_pipeline(
     controlnet_revision: str,
     inpaint_model_id: str,
     inpaint_revision: str,
-) -> tuple[Any, GeneratorFactory]:
+) -> tuple[Any, GeneratorFactory, RuntimePolicy]:
     import torch
     from diffusers import ControlNetModel, StableDiffusionControlNetInpaintPipeline
 
+    policy = runtime_policy(
+        torch.cuda.get_device_name(),
+        torch.cuda.get_device_capability(),
+    )
+    dtype = torch.float32 if policy.precision == "float32" else torch.float16
     controlnet = ControlNetModel.from_pretrained(
         controlnet_model_id,
         revision=controlnet_revision,
-        torch_dtype=torch.float16,
+        torch_dtype=dtype,
         use_safetensors=True,
     )
     pipeline = StableDiffusionControlNetInpaintPipeline.from_pretrained(
         inpaint_model_id,
         revision=inpaint_revision,
         controlnet=controlnet,
-        torch_dtype=torch.float16,
+        torch_dtype=dtype,
         variant="fp16",
         use_safetensors=True,
     )
@@ -219,7 +244,7 @@ def _load_pipeline(
     def make_generator(seed: int) -> Any:
         return torch.Generator(device="cuda").manual_seed(seed)
 
-    return pipeline, make_generator
+    return pipeline, make_generator, policy
 
 
 def _safe_image(result: object) -> Image.Image:
@@ -256,7 +281,7 @@ def run_request(request_path: Path, *, loader: PipelineLoader | None = None) -> 
             _probe_runtime()
             loader = _load_pipeline
         try:
-            pipeline, make_generator = loader(
+            pipeline, make_generator, policy = loader(
                 controlnet_model_id=CONTROLNET_MODEL_ID,
                 controlnet_revision=CONTROLNET_REVISION,
                 inpaint_model_id=INPAINT_MODEL_ID,
@@ -270,7 +295,12 @@ def run_request(request_path: Path, *, loader: PipelineLoader | None = None) -> 
             raise _fail("local_model_unavailable")
 
         try:
-            pipeline.enable_model_cpu_offload()
+            if policy.attention_slicing:
+                pipeline.enable_attention_slicing()
+            if policy.offload == "sequential":
+                pipeline.enable_sequential_cpu_offload()
+            else:
+                pipeline.enable_model_cpu_offload()
             result = pipeline(
                 prompt=request.prompt,
                 negative_prompt=_NEGATIVE_PROMPT,
