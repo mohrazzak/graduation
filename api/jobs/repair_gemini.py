@@ -3,15 +3,62 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 import urllib.error
 import urllib.request
+import warnings
+
+from PIL import Image
 
 from jobs.repair_errors import RepairUnavailable
 
 MODEL = "gemini-2.5-flash-image"
 _ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+_MAX_IMAGE_BYTES = 25 * 1024 * 1024
+_MAX_BASE64_CHARS = ((_MAX_IMAGE_BYTES + 2) // 3) * 4
+_IMAGE_FORMATS = {"image/jpeg": "JPEG", "image/png": "PNG"}
+
+
+def _normalized_png(data: object, mime_type: object) -> bytes:
+    """Strictly decode and normalize one bounded Gemini image to verified PNG."""
+    try:
+        if (
+            not isinstance(data, str)
+            or not data
+            or len(data) > _MAX_BASE64_CHARS
+            or not isinstance(mime_type, str)
+            or mime_type not in _IMAGE_FORMATS
+        ):
+            raise ValueError("invalid Gemini image envelope")
+        decoded = base64.b64decode(data, validate=True)
+        if not decoded or len(decoded) > _MAX_IMAGE_BYTES:
+            raise ValueError("Gemini image exceeds the byte limit")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(decoded)) as candidate:
+                if candidate.format != _IMAGE_FORMATS[mime_type]:
+                    raise ValueError("Gemini image format does not match its MIME type")
+                candidate.load()
+                has_alpha = "A" in candidate.getbands() or "transparency" in candidate.info
+                normalized = candidate.convert("RGBA" if has_alpha else "RGB")
+
+        output = io.BytesIO()
+        normalized.save(output, format="PNG")
+        png = output.getvalue()
+        if not png or len(png) > _MAX_IMAGE_BYTES:
+            raise ValueError("normalized Gemini PNG exceeds the byte limit")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(png)) as candidate:
+                candidate.verify()
+                if candidate.format != "PNG" or min(candidate.size) <= 0:
+                    raise ValueError("normalized Gemini result is not a PNG")
+        return png
+    except Exception as exc:  # noqa: BLE001 - provider bytes are an untrusted boundary
+        raise RepairUnavailable("backend_error") from exc
 
 
 def generate_gemini(image_bytes: bytes, prompt: str) -> bytes:
@@ -58,5 +105,7 @@ def generate_gemini(image_bytes: bytes, prompt: str) -> bytes:
     for part in parts:
         inline = part.get("inlineData") or part.get("inline_data")
         if inline and inline.get("data"):
-            return base64.b64decode(inline["data"])
+            return _normalized_png(
+                inline["data"], inline.get("mimeType") or inline.get("mime_type")
+            )
     raise RepairUnavailable("no_image_returned")

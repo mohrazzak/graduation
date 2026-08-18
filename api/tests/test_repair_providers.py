@@ -20,13 +20,20 @@ from jobs.repair_providers import (
     parse_backend,
 )
 
-PNG = b"\x89PNG\r\n\x1a\nprovider-test"
-
 
 def _jpeg() -> bytes:
     buffer = io.BytesIO()
     Image.new("RGB", (7, 5), (25, 50, 75)).save(buffer, format="JPEG")
     return buffer.getvalue()
+
+
+def _png() -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (7, 5), (25, 50, 75)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+PNG = _png()
 
 
 def _incomplete_png() -> bytes:

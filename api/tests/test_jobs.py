@@ -4,6 +4,7 @@ import io
 import json
 import struct
 import subprocess
+import threading
 import time
 import zlib
 from pathlib import Path
@@ -12,9 +13,10 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from jobs import repair
+from jobs import model3d, repair
 from jobs.local_controlnet import generate_local
 from jobs.repair_errors import RepairUnavailable
+from jobs.store import store
 from main import create_app
 
 
@@ -31,6 +33,12 @@ def client() -> TestClient:
 def _jpeg() -> bytes:
     buffer = io.BytesIO()
     Image.new("RGB", (160, 120), (110, 105, 100)).save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+
+def _png() -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (160, 120), (110, 105, 100)).save(buffer, format="PNG")
     return buffer.getvalue()
 
 
@@ -103,7 +111,7 @@ def test_repair_passes_the_raw_mask_and_tier_to_the_selected_provider(
 
     def generate_repaired(**kwargs: object) -> bytes:
         seen.update(kwargs)
-        return _jpeg()
+        return _png()
 
     monkeypatch.setattr(repair, "generate_repaired", generate_repaired)
     started = client.post("/jobs/repair", files=_files(), data={"tier": "PC"})
@@ -122,7 +130,7 @@ def test_repair_passes_the_raw_mask_and_tier_to_the_selected_provider(
     assert seen["building_mask"].mode == "L"
     assert seen["building_mask"].size == (160, 120)
 
-    for name in ("mask", "edges"):
+    for name in ("mask", "edges", "repaired"):
         artifact = client.get(f"/jobs/{job_id}/artifact/{name}")
         assert artifact.status_code == 200
         assert artifact.headers["content-type"] == "image/png"
@@ -203,6 +211,31 @@ def test_model3d_without_a_key_fails_with_a_reason(
 def test_model3d_rejects_an_unknown_source_job(client: TestClient) -> None:
     response = client.post("/jobs/model3d", data={"from_job": "does-not-exist"})
     assert response.status_code == 400
+
+
+def test_model3d_from_job_receives_the_exact_repaired_png_bytes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The repair-to-3D API path must not re-encode or otherwise alter its source."""
+    buffer = io.BytesIO()
+    Image.new("RGBA", (3, 2), (10, 20, 30, 40)).save(buffer, format="PNG")
+    expected = buffer.getvalue()
+    repair_job = store.create("repair", stage_total=len(repair.STAGE_KEYS))
+    store.add_artifact(repair_job.id, "repaired", expected, "image/png")
+    store.finish(repair_job.id)
+    received: dict[str, bytes] = {}
+    completed = threading.Event()
+
+    def capture_input(_job_id: str, image_bytes: bytes) -> None:
+        received["image_bytes"] = image_bytes
+        completed.set()
+
+    monkeypatch.setattr(model3d, "run", capture_input)
+    response = client.post("/jobs/model3d", data={"from_job": repair_job.id})
+
+    assert response.status_code == 200
+    assert completed.wait(2)
+    assert received["image_bytes"] == expected
 
 
 def test_unknown_job_is_404(client: TestClient) -> None:

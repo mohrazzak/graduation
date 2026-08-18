@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import struct
 import time
 import urllib.error
 import urllib.request
@@ -25,10 +26,44 @@ STAGE_KEYS = ("uploading", "reconstructing", "downloading")
 # Tripo's own queue can take minutes; poll gently and give up rather than hang.
 _POLL_SECONDS = 3
 _MAX_POLL_SECONDS = 300
+_MAX_GLB_BYTES = 32 * 1024 * 1024
+_DOWNLOAD_CHUNK_BYTES = 64 * 1024
 
 
 class Model3DUnavailable(RuntimeError):
     """Raised when 3D reconstruction cannot run (no key, quota, or failure)."""
+
+
+def _download_glb(url: str) -> bytes:
+    """Stream one bounded Tripo result and require its GLB v2 header contract."""
+    with urllib.request.urlopen(url, timeout=300) as response:
+        declared_length = response.headers.get("content-length")
+        if declared_length is not None:
+            try:
+                declared_bytes = int(declared_length)
+            except (TypeError, ValueError) as exc:
+                raise Model3DUnavailable("backend_error") from exc
+            if declared_bytes < 0 or declared_bytes > _MAX_GLB_BYTES:
+                raise Model3DUnavailable("backend_error")
+
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            chunk = response.read(_DOWNLOAD_CHUNK_BYTES)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _MAX_GLB_BYTES:
+                raise Model3DUnavailable("backend_error")
+            chunks.append(chunk)
+
+    glb = b"".join(chunks)
+    if len(glb) < 12 or glb[:4] != b"glTF":
+        raise Model3DUnavailable("backend_error")
+    version, encoded_length = struct.unpack_from("<II", glb, 4)
+    if version != 2 or encoded_length != len(glb):
+        raise Model3DUnavailable("backend_error")
+    return glb
 
 
 def _post_multipart(url: str, key: str, image_bytes: bytes) -> dict:
@@ -149,8 +184,7 @@ def generate_glb(image_bytes: bytes, on_stage) -> bytes:  # noqa: ANN001 - callb
             raise Model3DUnavailable("timed_out")
 
         on_stage("downloading", 3)
-        with urllib.request.urlopen(model_url, timeout=300) as response:
-            return response.read()
+        return _download_glb(model_url)
     except urllib.error.HTTPError as exc:
         raise Model3DUnavailable(
             "quota_exceeded" if exc.code in (402, 429) else "backend_error"
