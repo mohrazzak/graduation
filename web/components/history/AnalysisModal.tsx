@@ -33,6 +33,10 @@ export interface AnalysisModalProps {
   onRetryRepaired: () => void;
   /** Requests a fresh signed URL for a 3D model that failed to load. */
   onRetryModel: () => void;
+  /** Marks a signed restored image whose actual media request failed. */
+  onRepairedLoadError: () => void;
+  /** Marks a signed GLB whose actual media request or parse failed. */
+  onModelLoadError: () => void;
   /** Resolves true on success (the opener closes the modal), false on failure. */
   onDelete: () => Promise<boolean>;
   onClose: () => void;
@@ -49,6 +53,8 @@ export function AnalysisModal({
   modelArtifact,
   onRetryRepaired,
   onRetryModel,
+  onRepairedLoadError,
+  onModelLoadError,
   onDelete,
   onClose,
 }: AnalysisModalProps) {
@@ -168,6 +174,7 @@ export function AnalysisModal({
               baseSrc={imageUrl}
               overlaySrc={repairedArtifact.url}
               overlayAlt={t("repair.repairedAlt")}
+              onOverlayError={onRepairedLoadError}
             />
           ) : repairedArtifact.status === "loading" ? (
             <p role="status" className="text-xs text-muted">
@@ -187,6 +194,7 @@ export function AnalysisModal({
             <ModelViewer
               src={modelArtifact.url}
               downloadName={`damagescale-${analysis.id.slice(0, 8)}.glb`}
+              onError={onModelLoadError}
             />
           ) : modelArtifact.status === "loading" ? (
             <p role="status" className="text-xs text-muted">

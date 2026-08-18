@@ -11,9 +11,15 @@ export interface BeforeAfterProps {
   baseSrc: string;
   overlaySrc: string;
   overlayAlt: string;
+  onOverlayError?: () => void;
 }
 
-export function BeforeAfter({ baseSrc, overlaySrc, overlayAlt }: BeforeAfterProps) {
+export function BeforeAfter({
+  baseSrc,
+  overlaySrc,
+  overlayAlt,
+  onOverlayError,
+}: BeforeAfterProps) {
   return (
     <span className="relative block overflow-hidden rounded border border-line">
       {/* eslint-disable-next-line @next/next/no-img-element -- blob/API URLs */}
@@ -23,6 +29,7 @@ export function BeforeAfter({ baseSrc, overlaySrc, overlayAlt }: BeforeAfterProp
         alt={overlayAlt}
         opacity={1}
         fadeDuration={0}
+        onError={onOverlayError}
       />
     </span>
   );

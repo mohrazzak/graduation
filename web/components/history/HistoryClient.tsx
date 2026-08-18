@@ -1,13 +1,17 @@
 "use client";
 // History orchestrator: loads the saved analyses + signed thumbnail URLs, then
 // drives loading/error/empty/grid states, the detail modal, delete, and toast.
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { Toast } from "@/components/ui/Toast";
 import { deleteAnalysis, getSignedUrl, listAnalyses } from "@/lib/supabase/queries";
-import { loadSignedArtifact, type SignedArtifact } from "@/lib/signedArtifact.mts";
+import {
+  SignedArtifactController,
+  type SignedArtifact,
+  type SignedArtifactPublisher,
+} from "@/lib/signedArtifact.mts";
 import type { Analysis } from "@/lib/types";
 import { AnalysisModal } from "./AnalysisModal";
 import { EmptyState } from "./EmptyState";
@@ -54,6 +58,10 @@ export function HistoryClient() {
   const [modelArtifacts, setModelArtifacts] = useState<ArtifactMap>({});
   const [selected, setSelected] = useState<Analysis | null>(null);
   const [deletedToast, setDeletedToast] = useState(false);
+  const artifactControllerRef = useRef<SignedArtifactController | null>(null);
+  if (artifactControllerRef.current === null) {
+    artifactControllerRef.current = new SignedArtifactController();
+  }
 
   const applyLoad = useCallback((result: HistoryLoad) => {
     if (!result.ok) {
@@ -76,9 +84,32 @@ export function HistoryClient() {
   }, [applyLoad]);
 
   const signArtifact = useCallback(
-    (analysisId: string, path: string, setArtifacts: ArtifactMapSetter) => {
-      setArtifacts((artifacts) => ({ ...artifacts, [analysisId]: { status: "loading" } }));
-      void loadSignedArtifact(path, getSignedUrl).then((artifact) => {
+    (
+      kind: "repaired" | "model",
+      analysisId: string,
+      path: string,
+      setArtifacts: ArtifactMapSetter,
+    ) => {
+      const publish: SignedArtifactPublisher = (artifact) => {
+        setArtifacts((artifacts) => ({ ...artifacts, [analysisId]: artifact }));
+      };
+      void artifactControllerRef.current!.load(
+        `${kind}:${analysisId}`,
+        path,
+        getSignedUrl,
+        publish,
+      );
+    },
+    [],
+  );
+
+  const failArtifact = useCallback(
+    (
+      kind: "repaired" | "model",
+      analysisId: string,
+      setArtifacts: ArtifactMapSetter,
+    ) => {
+      artifactControllerRef.current!.fail(`${kind}:${analysisId}`, (artifact) => {
         setArtifacts((artifacts) => ({ ...artifacts, [analysisId]: artifact }));
       });
     },
@@ -88,7 +119,7 @@ export function HistoryClient() {
   const signRepairedArtifact = useCallback(
     (analysis: Analysis) => {
       if (analysis.repaired_path !== null) {
-        signArtifact(analysis.id, analysis.repaired_path, setRepairedArtifacts);
+        signArtifact("repaired", analysis.id, analysis.repaired_path, setRepairedArtifacts);
       }
     },
     [signArtifact],
@@ -97,7 +128,7 @@ export function HistoryClient() {
   const signModelArtifact = useCallback(
     (analysis: Analysis) => {
       if (analysis.model3d_path !== null) {
-        signArtifact(analysis.id, analysis.model3d_path, setModelArtifacts);
+        signArtifact("model", analysis.id, analysis.model3d_path, setModelArtifacts);
       }
     },
     [signArtifact],
@@ -136,6 +167,18 @@ export function HistoryClient() {
   const retryModelArtifact = useCallback(() => {
     if (selected !== null) signModelArtifact(selected);
   }, [selected, signModelArtifact]);
+
+  const failRepairedArtifact = useCallback(() => {
+    if (selected !== null) {
+      failArtifact("repaired", selected.id, setRepairedArtifacts);
+    }
+  }, [failArtifact, selected]);
+
+  const failModelArtifact = useCallback(() => {
+    if (selected !== null) {
+      failArtifact("model", selected.id, setModelArtifacts);
+    }
+  }, [failArtifact, selected]);
 
   const handleDelete = useCallback(async (): Promise<boolean> => {
     if (selected === null) return false;
@@ -185,6 +228,8 @@ export function HistoryClient() {
           modelArtifact={modelArtifacts[selected.id] ?? { status: "loading" }}
           onRetryRepaired={retryRepairedArtifact}
           onRetryModel={retryModelArtifact}
+          onRepairedLoadError={failRepairedArtifact}
+          onModelLoadError={failModelArtifact}
           onDelete={handleDelete}
           onClose={() => setSelected(null)}
         />

@@ -11,17 +11,24 @@ export interface ModelViewerProps {
   src: string;
   /** Filename offered when the user downloads it. */
   downloadName: string;
+  /** Called when model-viewer cannot fetch or parse the GLB. */
+  onError?: () => void;
 }
 
-export function ModelViewer({ src, downloadName }: ModelViewerProps) {
+export function ModelViewer({ src, downloadName, onError }: ModelViewerProps) {
   const t = useTranslations();
   const reduced = useReducedMotion() ?? false;
   const [ready, setReady] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<HTMLElement | null>(null);
+  const onErrorRef = useRef(onError);
   // A string, so effects keyed on it are stable by VALUE — unlike the
   // translator function, whose identity churn is what broke this before.
   const alt = t("model3d.viewerAlt");
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   // Loaded on demand rather than in the bundle: nobody who never reconstructs a
   // building should pay for the viewer.
@@ -55,8 +62,15 @@ export function ModelViewer({ src, downloadName }: ModelViewerProps) {
     el.setAttribute("shadow-intensity", "1");
     el.setAttribute("exposure", "1");
     el.setAttribute("style", "width:100%;height:100%;background-color:#0C0C0E;");
+    const handleError = () => onErrorRef.current?.();
+    el.addEventListener("error", handleError);
     hostRef.current.replaceChildren(el);
     viewerRef.current = el;
+    return () => {
+      el.removeEventListener("error", handleError);
+      if (viewerRef.current === el) viewerRef.current = null;
+      el.remove();
+    };
   }, [ready]);
 
   // Source and label changes update the element in place rather than

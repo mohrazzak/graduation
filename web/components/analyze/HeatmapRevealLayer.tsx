@@ -12,9 +12,16 @@ export interface HeatmapRevealLayerProps {
   /** Overlay opacity, supplied by ImageWithHeatmap (spec section 9: 0.45). */
   opacity: number;
   fadeDuration: number;
+  onError?: () => void;
 }
 
-export function HeatmapRevealLayer({ src, alt, opacity, fadeDuration }: HeatmapRevealLayerProps) {
+export function HeatmapRevealLayer({
+  src,
+  alt,
+  opacity,
+  fadeDuration,
+  onError,
+}: HeatmapRevealLayerProps) {
   const t = useTranslations("analyze");
   const [reveal, setReveal] = useState(100);
   const hidden = 100 - reveal;
@@ -34,7 +41,13 @@ export function HeatmapRevealLayer({ src, alt, opacity, fadeDuration }: HeatmapR
       className="absolute inset-0"
     >
       {/* eslint-disable-next-line @next/next/no-img-element -- blob/signed URLs gain nothing from next/image */}
-      <img src={src} alt={alt} style={{ opacity, clipPath }} className="h-full w-full" />
+      <img
+        src={src}
+        alt={alt}
+        onError={onError}
+        style={{ opacity, clipPath }}
+        className="h-full w-full"
+      />
       {/* Divider at the clip boundary; the range input below owns interaction. */}
       {reveal > 0 && reveal < 100 ? (
         <span
