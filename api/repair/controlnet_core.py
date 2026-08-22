@@ -12,11 +12,8 @@ import hashlib
 import numpy as np
 from PIL import Image, ImageFilter
 
-from predict.tiers import TierCode
+from predict.damage_classes import DamageCode
 
-_BOUNDED_TIERS = frozenset(("NC", "PC"))
-_WINDOW_X = (0.20, 0.80)
-_WINDOW_Y = (0.02, 0.85)
 _SEED_MODULUS = 2**31
 
 
@@ -26,31 +23,14 @@ def _resize_mask(mask: Image.Image, size: tuple[int, int]) -> Image.Image:
 
 
 def repair_mask(
-    building_mask: Image.Image,
-    tier: TierCode,
+    selection_mask: Image.Image,
+    class_code: DamageCode,
     size: tuple[int, int] = (512, 512),
 ) -> Image.Image:
-    """Return the tier-specific region that the inpainting worker may change.
-
-    Complete-collapse repairs use all building pixels.  Non-collapse repairs
-    are constrained to the central reference window before intersecting with
-    the existing building mask.
-    """
-    if tier not in ("GC", *_BOUNDED_TIERS):
-        raise ValueError(f"unsupported repair tier: {tier}")
-
-    resized = np.asarray(_resize_mask(building_mask, size), dtype=np.uint8)
-    if tier == "GC":
-        return Image.fromarray(resized, mode="L")
-
-    width, height = size
-    left = int(width * _WINDOW_X[0])
-    right = int(width * _WINDOW_X[1])
-    top = int(height * _WINDOW_Y[0])
-    bottom = int(height * _WINDOW_Y[1])
-    window = np.zeros((height, width), dtype=np.uint8)
-    window[top:bottom, left:right] = 255
-    return Image.fromarray(np.minimum(resized, window), mode="L")
+    """Resize the user's exact selection without class-dependent expansion."""
+    if class_code not in ("ND", "SMD", "HVD", "TD"):
+        raise ValueError(f"unsupported damage class: {class_code}")
+    return _resize_mask(selection_mask, size)
 
 
 def control_edges(
@@ -72,9 +52,9 @@ def control_edges(
     return Image.fromarray(edges, mode="L").convert("RGB")
 
 
-def generation_seed(image_bytes: bytes, tier: TierCode, prompt: str) -> int:
+def generation_seed(image_bytes: bytes, class_code: DamageCode, prompt: str) -> int:
     """Derive a stable 31-bit generation seed from all request inputs."""
-    digest = hashlib.sha256(image_bytes + tier.encode() + prompt.encode()).digest()
+    digest = hashlib.sha256(image_bytes + class_code.encode() + prompt.encode()).digest()
     return int.from_bytes(digest[:8], byteorder="big") % _SEED_MODULUS
 
 

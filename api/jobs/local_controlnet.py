@@ -19,7 +19,7 @@ from tempfile import TemporaryDirectory
 from PIL import Image
 
 from jobs.repair_errors import RepairUnavailable
-from predict.tiers import TierCode
+from predict.damage_classes import DamageCode
 from repair.controlnet_core import generation_seed
 
 _API_ROOT = Path(__file__).resolve().parents[1]
@@ -119,8 +119,8 @@ def _validated_output(output_path: Path) -> bytes:
 
 def generate_local(
     image_bytes: bytes,
-    building_mask: Image.Image,
-    tier: TierCode,
+    selection_mask: Image.Image,
+    class_code: DamageCode,
     prompt: str,
     *,
     runner: Runner | None = None,
@@ -140,7 +140,7 @@ def generate_local(
         try:
             with Image.open(io.BytesIO(image_bytes)) as source:
                 _save_normalized_png(source, input_path, "RGB")
-            _save_normalized_png(building_mask, mask_path, "L")
+            _save_normalized_png(selection_mask, mask_path, "L")
         except (Image.DecompressionBombError, OSError, ValueError) as exc:
             raise RepairUnavailable("local_generation_failed") from exc
 
@@ -151,9 +151,9 @@ def generate_local(
                         "input_path": str(input_path.resolve()),
                         "mask_path": str(mask_path.resolve()),
                         "output_path": str(output_path.resolve()),
-                        "tier": tier,
+                        "class_code": class_code,
                         "prompt": prompt,
-                        "seed": generation_seed(image_bytes, tier, prompt),
+                        "seed": generation_seed(image_bytes, class_code, prompt),
                     }
                 ),
                 encoding="utf-8",

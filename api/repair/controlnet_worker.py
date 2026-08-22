@@ -22,7 +22,7 @@ from typing import Any, Literal
 
 from PIL import Image
 
-from predict.tiers import TierCode
+from predict.damage_classes import DamageCode
 from repair.controlnet_core import composite_generated, control_edges, repair_mask
 
 CONTROLNET_MODEL_ID = "lllyasviel/sd-controlnet-canny"
@@ -78,7 +78,7 @@ class WorkerRequest:
     input_path: Path
     mask_path: Path
     output_path: Path
-    tier: TierCode
+    class_code: DamageCode
     prompt: str
     seed: int
 
@@ -164,8 +164,8 @@ def _parse_request(request_path: Path) -> WorkerRequest:
     if len({input_path, mask_path, output_path, resolved_request}) != 4:
         raise _fail()
 
-    tier = payload.get("tier")
-    if tier not in ("NC", "PC", "GC"):
+    class_code = payload.get("class_code")
+    if class_code not in ("ND", "SMD", "HVD", "TD"):
         raise _fail()
     prompt = payload.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > _MAX_PROMPT_CHARS:
@@ -174,7 +174,7 @@ def _parse_request(request_path: Path) -> WorkerRequest:
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < _SEED_LIMIT:
         raise _fail()
 
-    return WorkerRequest(input_path, mask_path, output_path, tier, prompt, seed)
+    return WorkerRequest(input_path, mask_path, output_path, class_code, prompt, seed)
 
 
 def _load_png(path: Path, mode: str) -> Image.Image:
@@ -266,7 +266,7 @@ def run_request(request_path: Path, *, loader: PipelineLoader | None = None) -> 
         request = _parse_request(request_path)
         original = _load_png(request.input_path, "RGB")
         building_mask = _load_png(request.mask_path, "L")
-        inpaint_mask = repair_mask(building_mask, request.tier, _TARGET_SIZE)
+        inpaint_mask = repair_mask(building_mask, request.class_code, _TARGET_SIZE)
         init_image = original.resize(_TARGET_SIZE, Image.Resampling.LANCZOS)
         control_image = control_edges(original, inpaint_mask, _TARGET_SIZE)
     except WorkerError:

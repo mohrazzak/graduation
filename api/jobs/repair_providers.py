@@ -11,7 +11,7 @@ from PIL import Image
 
 from jobs.repair_errors import RepairUnavailable
 from jobs.repair_gemini import generate_gemini
-from predict.tiers import TierCode
+from predict.damage_classes import DamageCode
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,8 @@ def generate_with(
 
 def generate_repaired(
     image_bytes: bytes,
-    building_mask: Image.Image,
-    tier: TierCode,
+    selection_mask: Image.Image,
+    class_code: DamageCode,
     prompt: str,
 ) -> bytes:
     """Run the configured repair backend with a lazy optional local import."""
@@ -61,7 +61,7 @@ def generate_repaired(
             from jobs.local_controlnet import generate_local as local_generator
         except (ImportError, RuntimeError) as exc:
             raise RepairUnavailable("local_dependency_missing") from exc
-        return local_generator(image_bytes, building_mask, tier, prompt)
+        return local_generator(image_bytes, selection_mask, class_code, prompt)
 
     def local_available() -> bool:
         try:

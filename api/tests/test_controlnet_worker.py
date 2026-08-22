@@ -91,7 +91,7 @@ def write_request(
                 "input_path": str(source),
                 "mask_path": str(mask),
                 "output_path": str(output),
-                "tier": "GC",
+                "class_code": "TD",
                 "prompt": "restore the concrete facade",
                 "seed": 1_234_567,
             }

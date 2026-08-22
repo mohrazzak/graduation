@@ -42,8 +42,21 @@ def _png() -> bytes:
     return buffer.getvalue()
 
 
+def _mask_png(value: int = 255, size: tuple[int, int] = (160, 120)) -> bytes:
+    buffer = io.BytesIO()
+    Image.new("L", size, value).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def _files():
     return {"file": ("b.jpg", _jpeg(), "image/jpeg")}
+
+
+def _repair_files(mask: bytes | None = None):
+    return {
+        "file": ("b.jpg", _jpeg(), "image/jpeg"),
+        "mask": ("mask.png", mask if mask is not None else _mask_png(), "image/png"),
+    }
 
 
 def _incomplete_png() -> bytes:
@@ -69,8 +82,8 @@ def _malformed_local_generation(**kwargs: object) -> bytes:
 
     return generate_local(
         kwargs["image_bytes"],
-        kwargs["building_mask"],
-        kwargs["tier"],
+        kwargs["selection_mask"],
+        kwargs["class_code"],
         kwargs["prompt"],
         runner=runner,
     )
@@ -88,19 +101,53 @@ def _wait(client: TestClient, job_id: str, timeout: float = 120.0) -> dict:
     return body
 
 
-def test_repair_requires_a_tier(client: TestClient) -> None:
-    """Restoration is gated on classification — no tier, no job."""
+def test_repair_requires_a_class_code_and_mask(client: TestClient) -> None:
+    """Restoration is gated on classification and an explicit selection."""
     response = client.post("/jobs/repair", files=_files())
     assert response.status_code == 400
 
 
-def test_repair_rejects_a_non_tier_value(client: TestClient) -> None:
-    response = client.post("/jobs/repair", files=_files(), data={"tier": "LEVEL_4"})
+def test_repair_rejects_a_non_class_value(client: TestClient) -> None:
+    response = client.post(
+        "/jobs/repair", files=_repair_files(), data={"class_code": "LEVEL_4"}
+    )
     assert response.status_code == 400
-    assert "NC" in response.json()["detail"]
+    assert "ND" in response.json()["detail"]
 
 
-def test_repair_passes_the_raw_mask_and_tier_to_the_selected_provider(
+def test_mask_preparation_returns_raw_mask_and_edges(client: TestClient) -> None:
+    job_id = client.post("/jobs/mask", files=_files()).json()["job_id"]
+    body = _wait(client, job_id)
+
+    assert body["status"] == "done"
+    assert body["artifacts"] == ["edges", "mask"]
+    mask = client.get(f"/jobs/{job_id}/artifact/mask")
+    decoded = Image.open(io.BytesIO(mask.content))
+    assert decoded.mode == "L"
+    assert decoded.size == (160, 120)
+
+
+@pytest.mark.parametrize(
+    ("mask", "reason"),
+    [
+        (b"not-an-image", "invalid_mask"),
+        (_mask_png(0), "empty_mask"),
+        (_mask_png(size=(20, 20)), "mask_size_mismatch"),
+    ],
+)
+def test_repair_rejects_invalid_masks(
+    client: TestClient, mask: bytes, reason: str
+) -> None:
+    response = client.post(
+        "/jobs/repair",
+        files=_repair_files(mask),
+        data={"class_code": "SMD"},
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": reason}
+
+
+def test_repair_passes_the_selection_and_class_to_the_selected_provider(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The provider receives the Pillow mask, while local artifacts remain public.
@@ -114,27 +161,57 @@ def test_repair_passes_the_raw_mask_and_tier_to_the_selected_provider(
         return _png()
 
     monkeypatch.setattr(repair, "generate_repaired", generate_repaired)
-    started = client.post("/jobs/repair", files=_files(), data={"tier": "PC"})
+    started = client.post(
+        "/jobs/repair", files=_repair_files(), data={"class_code": "SMD"}
+    )
     assert started.status_code == 200
     job_id = started.json()["job_id"]
 
     body = _wait(client, job_id)
     assert body["status"] == "done"
-    assert "mask" in body["artifacts"]
-    assert "edges" in body["artifacts"]
     assert "repaired" in body["artifacts"]
     assert seen["image_bytes"] == _jpeg()
-    assert seen["tier"] == "PC"
+    assert seen["class_code"] == "SMD"
     assert seen["prompt"]
-    assert isinstance(seen["building_mask"], Image.Image)
-    assert seen["building_mask"].mode == "L"
-    assert seen["building_mask"].size == (160, 120)
+    assert isinstance(seen["selection_mask"], Image.Image)
+    assert seen["selection_mask"].mode == "L"
+    assert seen["selection_mask"].size == (160, 120)
 
-    for name in ("mask", "edges", "repaired"):
+    for name in ("repaired",):
         artifact = client.get(f"/jobs/{job_id}/artifact/{name}")
         assert artifact.status_code == 200
         assert artifact.headers["content-type"] == "image/png"
         assert Image.open(io.BytesIO(artifact.content)).format == "PNG"
+
+
+def test_repair_preserves_every_unselected_source_pixel(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    selection = Image.new("L", (160, 120), 0)
+    selection.paste(255, (0, 0, 80, 120))
+    mask_buffer = io.BytesIO()
+    selection.save(mask_buffer, format="PNG")
+
+    generated = io.BytesIO()
+    Image.new("RGB", (160, 120), "blue").save(generated, format="PNG")
+    monkeypatch.setattr(
+        repair, "generate_repaired", lambda **kwargs: generated.getvalue()
+    )
+
+    job_id = client.post(
+        "/jobs/repair",
+        files=_repair_files(mask_buffer.getvalue()),
+        data={"class_code": "HVD"},
+    ).json()["job_id"]
+    body = _wait(client, job_id)
+    assert body["status"] == "done"
+
+    repaired = Image.open(
+        io.BytesIO(client.get(f"/jobs/{job_id}/artifact/repaired").content)
+    ).convert("RGB")
+    original = Image.open(io.BytesIO(_jpeg())).convert("RGB")
+    assert repaired.getpixel((120, 60)) == original.getpixel((120, 60))
+    assert repaired.getpixel((10, 60)) != original.getpixel((10, 60))
 
 
 def test_repair_reports_a_named_reason_when_generation_cannot_run(
@@ -143,7 +220,7 @@ def test_repair_reports_a_named_reason_when_generation_cannot_run(
     """A missing key is a named cause, not a stack trace."""
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     job_id = client.post(
-        "/jobs/repair", files=_files(), data={"tier": "GC"}
+        "/jobs/repair", files=_repair_files(), data={"class_code": "TD"}
     ).json()["job_id"]
     body = _wait(client, job_id)
     assert body["status"] == "error"
@@ -156,7 +233,7 @@ def test_repair_reports_named_local_failure_for_malformed_worker_output(
     """A local validation error must not be downgraded to an unexpected job crash."""
     monkeypatch.setattr(repair, "generate_repaired", _malformed_local_generation)
     job_id = client.post(
-        "/jobs/repair", files=_files(), data={"tier": "GC"}
+        "/jobs/repair", files=_repair_files(), data={"class_code": "TD"}
     ).json()["job_id"]
 
     body = _wait(client, job_id)
@@ -171,15 +248,13 @@ def test_invalid_repair_backend_is_a_stable_job_error(
     """A deployment typo must fail closed without losing preparation artifacts."""
     monkeypatch.setenv("REPAIR_BACKEND", "controlnet")
     job_id = client.post(
-        "/jobs/repair", files=_files(), data={"tier": "GC"}
+        "/jobs/repair", files=_repair_files(), data={"class_code": "TD"}
     ).json()["job_id"]
 
     body = _wait(client, job_id)
 
     assert body["status"] == "error"
     assert body["detail"] == "invalid_repair_backend"
-    assert "mask" in body["artifacts"]
-    assert "edges" in body["artifacts"]
     assert "repaired" not in body["artifacts"]
 
 
@@ -204,15 +279,13 @@ def test_local_controlnet_failure_keeps_preparation_artifacts_and_reason(
 
     monkeypatch.setattr("jobs.local_controlnet.generate_local", unavailable)
     job_id = client.post(
-        "/jobs/repair", files=_files(), data={"tier": "GC"}
+        "/jobs/repair", files=_repair_files(), data={"class_code": "TD"}
     ).json()["job_id"]
 
     body = _wait(client, job_id)
 
     assert body["status"] == "error"
     assert body["detail"] == reason
-    assert "mask" in body["artifacts"]
-    assert "edges" in body["artifacts"]
     assert "repaired" not in body["artifacts"]
 
 
@@ -267,7 +340,7 @@ def test_unknown_job_is_404(client: TestClient) -> None:
 
 def test_missing_artifact_is_404(client: TestClient) -> None:
     job_id = client.post(
-        "/jobs/repair", files=_files(), data={"tier": "NC"}
+        "/jobs/repair", files=_repair_files(), data={"class_code": "ND"}
     ).json()["job_id"]
     _wait(client, job_id)
     assert client.get(f"/jobs/{job_id}/artifact/not-a-thing").status_code == 404
@@ -276,7 +349,7 @@ def test_missing_artifact_is_404(client: TestClient) -> None:
 def test_stage_reporting_never_exceeds_the_declared_total(client: TestClient) -> None:
     """The client renders index/total; a stage past the end would break it."""
     job_id = client.post(
-        "/jobs/repair", files=_files(), data={"tier": "PC"}
+        "/jobs/repair", files=_repair_files(), data={"class_code": "SMD"}
     ).json()["job_id"]
     seen = []
     deadline = time.monotonic() + 120

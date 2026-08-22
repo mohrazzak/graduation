@@ -12,9 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from PIL import Image
 
+from jobs import mask as mask_job
 from jobs import model3d, repair
 from jobs.store import store as job_store
-from predict.damage_classes import NoDetectionError
+from predict.damage_classes import DAMAGE_CLASS_ORDER, NoDetectionError
 from predict.registry import (
     ModelUnavailableError,
     UnknownModelError,
@@ -22,7 +23,6 @@ from predict.registry import (
     get_classifier,
     list_models,
 )
-from predict.tiers import TIER_ORDER
 from schemas import (
     HealthResponse,
     ModelInfoResponse,
@@ -200,27 +200,47 @@ def create_app() -> FastAPI:
             ) from exc
         return data
 
+    @app.post("/jobs/mask")
+    async def start_mask(request: Request, file: UploadFile) -> dict[str, str]:
+        """Prepare an automatic building mask for browser-side editing."""
+        data = await _read_upload(request, file)
+        job = job_store.create("mask", stage_total=len(mask_job.STAGE_KEYS))
+        threading.Thread(target=mask_job.run, args=(job.id, data), daemon=True).start()
+        return {"job_id": job.id}
+
     @app.post("/jobs/repair")
     async def start_repair(
         request: Request,
         file: UploadFile,
-        tier: str = Form(...),
+        mask: UploadFile,
+        class_code: str = Form(...),
         prompt: str | None = Form(None),
     ) -> dict[str, str]:
-        """Start a 2D restoration job.
-
-        The tier is REQUIRED: restoration is gated on classification, so a
-        request that never classified is rejected rather than guessed at.
-        """
-        if tier not in TIER_ORDER:
+        """Start selective 2D restoration through the submitted mask only."""
+        if class_code not in DAMAGE_CLASS_ORDER:
             raise HTTPException(
                 status_code=400,
-                detail="A valid tier (NC, PC or GC) is required. Classify the photo first.",
+                detail=(
+                    "A valid class_code (ND, SMD, HVD or TD) is required. "
+                    "Classify the photo first."
+                ),
             )
         data = await _read_upload(request, file)
+        if mask.content_type != "image/png":
+            raise HTTPException(status_code=400, detail="invalid_mask")
+        mask_bytes = await mask.read()
+        if not mask_bytes or len(mask_bytes) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=400, detail="invalid_mask")
+        source_size = Image.open(io.BytesIO(data)).size
+        try:
+            selection = repair.decode_selection_mask(mask_bytes, source_size)
+        except repair.MaskValidationError as exc:
+            raise HTTPException(status_code=400, detail=exc.reason) from exc
         job = job_store.create("repair", stage_total=len(repair.STAGE_KEYS))
         threading.Thread(
-            target=repair.run, args=(job.id, data, tier, prompt), daemon=True
+            target=repair.run,
+            args=(job.id, data, selection, class_code, prompt),
+            daemon=True,
         ).start()
         return {"job_id": job.id}
 

@@ -110,7 +110,7 @@ def test_generation_uses_checked_absolute_worker_request_and_normalized_pngs() -
     result = generate_local(
         source,
         mask,
-        "PC",
+        "SMD",
         "rebuild the facade; do not execute this",
         runner=_successful_runner(seen, expected),
         python="/safe/worker-python",
@@ -126,7 +126,7 @@ def test_generation_uses_checked_absolute_worker_request_and_normalized_pngs() -
     assert len(seen["command"]) == 5
     assert seen["kwargs"] == {"shell": False, "timeout": 900, "capture_output": True}
     request = seen["request"]
-    assert request["tier"] == "PC"
+    assert request["class_code"] == "SMD"
     assert request["prompt"] == "rebuild the facade; do not execute this"
     for key, name in (
         ("input_path", "input.png"),
@@ -150,7 +150,7 @@ def test_worker_timeout_has_a_stable_reason() -> None:
         raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
 
     with pytest.raises(RepairUnavailable) as error:
-        generate_local(_image_bytes(), Image.new("L", (7, 5)), "GC", "repair", runner=timeout)
+        generate_local(_image_bytes(), Image.new("L", (7, 5)), "TD", "repair", runner=timeout)
     assert error.value.reason == "local_timed_out"
 
 
@@ -161,7 +161,7 @@ def test_missing_worker_interpreter_has_a_stable_reason() -> None:
         raise FileNotFoundError
 
     with pytest.raises(RepairUnavailable) as error:
-        generate_local(_image_bytes(), Image.new("L", (7, 5)), "GC", "repair", runner=missing)
+        generate_local(_image_bytes(), Image.new("L", (7, 5)), "TD", "repair", runner=missing)
     assert error.value.reason == "local_dependency_missing"
 
 
@@ -187,7 +187,7 @@ def test_nonzero_worker_exit_exposes_only_a_whitelisted_reason(
 
     with pytest.raises(RepairUnavailable) as error:
         generate_local(
-            _image_bytes(), Image.new("L", (7, 5)), "GC", "repair", runner=failed
+            _image_bytes(), Image.new("L", (7, 5)), "TD", "repair", runner=failed
         )
     assert error.value.reason == expected
 
@@ -202,7 +202,7 @@ def test_blank_worker_python_uses_the_absolute_default(
     generate_local(
         _image_bytes(),
         Image.new("L", (7, 5)),
-        "GC",
+        "TD",
         "repair",
         runner=_successful_runner(seen, _image_bytes("PNG")),
     )
@@ -222,7 +222,7 @@ def test_relative_worker_python_fails_before_forced_generation(
         generate_local(
             _image_bytes(),
             Image.new("L", (7, 5)),
-            "GC",
+            "TD",
             "repair",
             runner=lambda *args, **kwargs: pytest.fail("runner must not start"),
         )
@@ -253,14 +253,14 @@ def test_request_write_failure_has_a_stable_reason(
 
     monkeypatch.setattr(Path, "write_text", fail_write)
     with pytest.raises(RepairUnavailable) as error:
-        generate_local(_image_bytes(), Image.new("L", (7, 5)), "GC", "repair")
+        generate_local(_image_bytes(), Image.new("L", (7, 5)), "TD", "repair")
     assert error.value.reason == "local_generation_failed"
 
 
 def test_unencodable_prompt_has_a_stable_reason() -> None:
     """Unicode encoding failures in seed/request preparation remain bounded."""
     with pytest.raises(RepairUnavailable) as error:
-        generate_local(_image_bytes(), Image.new("L", (7, 5)), "GC", "bad\ud800prompt")
+        generate_local(_image_bytes(), Image.new("L", (7, 5)), "TD", "bad\ud800prompt")
     assert error.value.reason == "local_generation_failed"
 
 
@@ -270,7 +270,7 @@ def test_unsafe_source_image_has_a_stable_reason() -> None:
         generate_local(
             _decompression_bomb_header(),
             Image.new("L", (7, 5)),
-            "GC",
+            "TD",
             "repair",
         )
     assert error.value.reason == "local_generation_failed"
@@ -301,7 +301,7 @@ def test_invalid_worker_output_has_a_stable_reason(
         return subprocess.CompletedProcess(command, returncode, b"", b"worker diagnostics")
 
     with pytest.raises(RepairUnavailable) as error:
-        generate_local(_image_bytes(), Image.new("L", (7, 5)), "NC", description, runner=run)
+        generate_local(_image_bytes(), Image.new("L", (7, 5)), "ND", description, runner=run)
     assert error.value.reason == "local_generation_failed"
 
 
@@ -314,7 +314,7 @@ def test_compressible_large_png_output_has_a_stable_reason() -> None:
         generate_local(
             _image_bytes(),
             Image.new("L", (7, 5)),
-            "NC",
+            "ND",
             "repair",
             runner=_successful_runner({}, output),
         )
