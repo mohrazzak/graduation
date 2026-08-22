@@ -43,25 +43,25 @@ def test_models_reports_unavailable_with_a_reason(client, monkeypatch):
     assert entry["reason"] == "weights_missing"
 
 
-def test_predict_returns_tier_codes_not_indices(client):
+def test_predict_returns_class_codes_not_indices(client):
     body = _upload(client).json()
-    assert body["tier"] in ("NC", "PC", "GC")
-    assert isinstance(body["probabilities"], dict)
-    assert set(body["probabilities"]) == {"NC", "PC", "GC"}
+    assert body["class_code"] in ("ND", "SMD", "HVD", "TD")
+    assert isinstance(body["scores"], dict)
+    assert set(body["scores"]) == {"ND", "SMD", "HVD", "TD"}
     assert "level" not in body
 
 
 def test_predict_reports_which_model_ran(client):
     body = _upload(client).json()
     assert body["model"]["id"] == "mock"
-    assert 0.0 <= body["damage_percent"] <= 100.0
+    assert len(body["detections"]) == 1
 
 
 def test_predict_is_deterministic_for_the_same_bytes(client):
     first = _upload(client).json()
     second = _upload(client).json()
-    assert first["tier"] == second["tier"]
-    assert first["probabilities"] == second["probabilities"]
+    assert first["class_code"] == second["class_code"]
+    assert first["scores"] == second["scores"]
 
 
 def test_predict_rejects_an_unknown_model(client):

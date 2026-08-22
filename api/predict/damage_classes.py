@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 
 DamageCode = Literal["ND", "SMD", "HVD", "TD"]
 
@@ -67,6 +67,18 @@ class Prediction:
     confidence: float
     scores: dict[DamageCode, float]
     detections: tuple[Detection, ...]
+
+
+class DetectorClassifier(Protocol):
+    """Runtime contract shared by Raed and the development mock."""
+
+    id: str
+    name: str
+    accuracy: float | None
+
+    def classify(self, image_bytes: bytes) -> Prediction:
+        """Detect damaged buildings and summarize the most severe class."""
+        ...
 
 
 def validate_model_names(names: Mapping[int, str]) -> None:

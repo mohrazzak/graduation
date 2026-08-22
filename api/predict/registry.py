@@ -32,13 +32,16 @@ with contextlib.suppress(ImportError):
     import torch  # noqa: F401  # see module docstring
     import ultralytics  # noqa: F401  # MUST precede any TensorFlow use
 
-from predict.interface import Classifier
+from predict.damage_classes import DetectorClassifier
+from predict.interface import Classifier as LegacyClassifier
 
 logger = logging.getLogger(__name__)
 
 # Roster order is also UI order and default-selection order.
-_ROSTER: tuple[str, ...] = ("resnet50-phinet", "yolo-cls", "raed", "mock")
-_DEFAULT_ENABLED = "resnet50-phinet,yolo-cls,raed"
+_ROSTER: tuple[str, ...] = ("raed", "mock")
+_LEGACY_MODELS: tuple[str, ...] = ("resnet50-phinet", "yolo-cls")
+_ALL_MODELS = _LEGACY_MODELS + _ROSTER
+_DEFAULT_ENABLED = "raed"
 
 # Reasons are message keys, translated in the frontend — never raw English.
 REASON_WEIGHTS_MISSING = "weights_missing"
@@ -48,7 +51,7 @@ REASON_LOAD_FAILED = "load_failed"
 _DISPLAY_NAMES = {
     "resnet50-phinet": "ResNet50 (PHI-Net)",
     "yolo-cls": "YOLO11-cls",
-    "raed": "Raed's model",
+    "raed": "YOLOv8s Building Damage Detector",
     "mock": "Mock",
 }
 
@@ -77,7 +80,7 @@ class ModelInfo:
     reason: str | None
 
 
-def _load(model_id: str) -> Classifier:
+def _load(model_id: str) -> DetectorClassifier | LegacyClassifier:
     """Import and construct one backend.
 
     Imports are local so that selecting the mock never pulls in TensorFlow or
@@ -109,7 +112,7 @@ def _load(model_id: str) -> Classifier:
 # Loaded backends are cached: a Keras ResNet takes seconds to load and must not
 # be re-read per request. Failures are deliberately NOT cached, so a model
 # becomes available as soon as its weights appear.
-_cache: dict[str, Classifier] = {}
+_cache: dict[str, DetectorClassifier | LegacyClassifier] = {}
 
 
 def _enabled_ids() -> list[str]:
@@ -131,7 +134,7 @@ def _enabled_ids() -> list[str]:
     return enabled
 
 
-def get_classifier(model_id: str | None = None) -> Classifier:
+def get_classifier(model_id: str | None = None) -> DetectorClassifier | LegacyClassifier:
     """Return a loaded backend by id, or the default when id is None.
 
     Raises:
@@ -139,7 +142,7 @@ def get_classifier(model_id: str | None = None) -> Classifier:
         ModelUnavailableError: the backend exists but cannot load.
     """
     resolved = model_id or default_model_id()
-    if resolved not in _ROSTER:
+    if resolved not in _ALL_MODELS:
         raise UnknownModelError(f"unknown model id: {resolved}")
     if resolved not in _cache:
         _cache[resolved] = _load(resolved)

@@ -14,6 +14,7 @@ from PIL import Image
 
 from jobs import model3d, repair
 from jobs.store import store as job_store
+from predict.damage_classes import NoDetectionError
 from predict.registry import (
     ModelUnavailableError,
     UnknownModelError,
@@ -144,18 +145,32 @@ def create_app() -> FastAPI:
                 detail="That model is not available on this server right now.",
             ) from exc
 
-        prediction = classifier.classify(data)
+        try:
+            prediction = classifier.classify(data)
+        except NoDetectionError as exc:
+            raise HTTPException(status_code=422, detail="no_detection") from exc
         return PredictionResponse(
-            tier=prediction.tier,
+            class_code=prediction.class_code,
             confidence=prediction.confidence,
-            probabilities=prediction.probabilities,
-            damage_percent=prediction.damage_percent,
+            scores=prediction.scores,
+            detections=[
+                {
+                    "class_code": detection.class_code,
+                    "confidence": detection.confidence,
+                    "box": {
+                        "x1": detection.box.x1,
+                        "y1": detection.box.y1,
+                        "x2": detection.box.x2,
+                        "y2": detection.box.y2,
+                    },
+                }
+                for detection in prediction.detections
+            ],
             model=ModelInfoResponse(
                 id=classifier.id,
                 name=classifier.name,
                 accuracy=classifier.accuracy,
             ),
-            heatmap_base64=prediction.heatmap_base64,
         )
 
     # ---- Long-running services: restoration and 3D reconstruction ----------

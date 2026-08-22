@@ -1,8 +1,8 @@
-"""Pydantic response models for the tier-based API contract (spec section 4)."""
+"""Pydantic response models for the active four-class detector contract."""
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from predict.tiers import TierCode
+from predict.damage_classes import DamageCode
 
 
 class ModelInfoResponse(BaseModel):
@@ -21,24 +21,39 @@ class ModelsResponse(BaseModel):
     models: list[ModelInfoResponse]
 
 
+class BoxResponse(BaseModel):
+    """Normalized `xyxy` bounds for one detected building."""
+
+    x1: float = Field(ge=0, le=1)
+    y1: float = Field(ge=0, le=1)
+    x2: float = Field(ge=0, le=1)
+    y2: float = Field(ge=0, le=1)
+
+
+class DetectionResponse(BaseModel):
+    """One building detection returned by Raed's model."""
+
+    class_code: DamageCode
+    confidence: float = Field(ge=0, le=1)
+    box: BoxResponse
+
+
 class PredictionResponse(BaseModel):
     """JSON body returned by POST /predict.
 
-    Probabilities are keyed by tier CODE, never by index — the models emit
-    classes alphabetically while the product reasons by severity, so an indexed
-    wire format is the one shape that invites silent mislabeling.
+    Scores are maximum observed detector confidences per class, not fabricated
+    probabilities and therefore are not required to sum to one.
     """
 
     # "model_" is a protected namespace in pydantic v2; this response genuinely
     # has a field called `model`, so the protection is switched off here.
     model_config = ConfigDict(protected_namespaces=())
 
-    tier: TierCode
+    class_code: DamageCode
     confidence: float = Field(ge=0, le=1)
-    probabilities: dict[TierCode, float]
-    damage_percent: float = Field(ge=0, le=100)
+    scores: dict[DamageCode, float]
+    detections: list[DetectionResponse]
     model: ModelInfoResponse
-    heatmap_base64: str | None = None
 
 
 class HealthResponse(BaseModel):

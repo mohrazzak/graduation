@@ -18,17 +18,15 @@ def test_mock_is_always_available_and_deterministic():
     first = mock.classify(SAMPLE)
     second = mock.classify(SAMPLE)
     assert first == second
-    assert first.tier in ("NC", "PC", "GC")
+    assert first.class_code in ("ND", "SMD", "HVD", "TD")
 
 
-def test_mock_emits_the_three_tier_contract():
+def test_mock_emits_the_four_class_detector_contract():
     prediction = get_classifier("mock").classify(SAMPLE)
-    assert set(prediction.probabilities) == {"NC", "PC", "GC"}
-    assert prediction.probabilities[prediction.tier] == pytest.approx(
-        prediction.confidence
-    )
-    assert sum(prediction.probabilities.values()) == pytest.approx(1.0, abs=1e-6)
-    assert 0.0 <= prediction.damage_percent <= 100.0
+    assert set(prediction.scores) == {"ND", "SMD", "HVD", "TD"}
+    assert prediction.scores[prediction.class_code] == pytest.approx(prediction.confidence)
+    assert len(prediction.detections) == 1
+    assert prediction.detections[0].class_code == prediction.class_code
 
 
 def test_different_images_give_different_results():
@@ -70,7 +68,7 @@ def test_unavailable_models_are_listed_with_a_reason(monkeypatch):
     raed = next(m for m in list_models() if m.id == "raed")
     assert raed.available is False
     assert raed.reason == "weights_missing"
-    assert raed.name == "Raed's model"
+    assert raed.name == "YOLOv8s Building Damage Detector"
 
 
 def test_selecting_an_unavailable_model_raises(monkeypatch):

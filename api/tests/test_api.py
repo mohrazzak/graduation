@@ -1,4 +1,4 @@
-"""Contract tests for the tier-based API — locks the wire shape the frontend
+"""Contract tests for the four-class API — locks the wire shape the frontend
 depends on, and the upload guards that protect POST /predict."""
 
 import io
@@ -45,35 +45,30 @@ def test_health(client: TestClient) -> None:
 
 
 def test_predict_contract_shape(client: TestClient) -> None:
-    """POST /predict returns the tier-keyed JSON shape from spec section 4."""
+    """POST /predict returns Raed's detector-derived four-class contract."""
     response = _post_image(client, _png_bytes((120, 120, 120)))
     assert response.status_code == 200
     body = response.json()
 
-    assert body["tier"] in ("NC", "PC", "GC")
-
-    probabilities = body["probabilities"]
-    assert set(probabilities) == {"NC", "PC", "GC"}
-    assert all(p >= 0 for p in probabilities.values())
-    assert abs(sum(probabilities.values()) - 1.0) < 0.01
-
-    # The reported tier must be the argmax, and confidence must be its probability.
-    assert max(probabilities, key=probabilities.__getitem__) == body["tier"]
-    assert body["confidence"] == pytest.approx(probabilities[body["tier"]])
-
-    assert 0.0 <= body["damage_percent"] <= 100.0
+    assert body["class_code"] in ("ND", "SMD", "HVD", "TD")
+    assert set(body["scores"]) == {"ND", "SMD", "HVD", "TD"}
+    assert body["confidence"] == pytest.approx(body["scores"][body["class_code"]])
+    assert len(body["detections"]) >= 1
+    detection = body["detections"][0]
+    assert detection["class_code"] in ("ND", "SMD", "HVD", "TD")
+    assert set(detection["box"]) == {"x1", "y1", "x2", "y2"}
     assert body["model"]["id"] == "mock"
-
-    # Real backends return no heatmap in v1; the mock matches them rather than
-    # showing a model explanation that no model produced.
-    assert body["heatmap_base64"] is None
+    assert "tier" not in body
+    assert "probabilities" not in body
+    assert "damage_percent" not in body
+    assert "heatmap_base64" not in body
 
 
 def test_predict_never_exposes_a_class_index(client: TestClient) -> None:
     """Indices are the mislabeling bug's only entry point — keep them off the wire."""
     body = _post_image(client, _png_bytes((77, 88, 99))).json()
     assert "level" not in body
-    assert not isinstance(body["probabilities"], list)
+    assert not isinstance(body["scores"], list)
 
 
 def test_predict_deterministic(client: TestClient) -> None:
@@ -85,16 +80,36 @@ def test_predict_deterministic(client: TestClient) -> None:
     assert first.content == second.content
 
 
-def test_distinct_images_yield_multiple_tiers(client: TestClient) -> None:
-    """Different images must spread across tiers (guards a constant mock)."""
-    tiers = set()
+def test_distinct_images_yield_multiple_classes(client: TestClient) -> None:
+    """Different images must spread across classes (guards a constant mock)."""
+    classes = set()
     for shade in range(12):
         response = _post_image(
             client, _png_bytes((shade * 20, 255 - shade * 20, shade * 7))
         )
         assert response.status_code == 200
-        tiers.add(response.json()["tier"])
-    assert len(tiers) >= 2
+        classes.add(response.json()["class_code"])
+    assert len(classes) >= 2
+
+
+def test_no_detection_is_explicit_not_no_damage(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty detector result is unable-to-assess, never fabricated ND."""
+    from predict.damage_classes import NoDetectionError
+
+    class EmptyDetector:
+        id = "raed"
+        name = "YOLOv8s Building Damage Detector"
+        accuracy = None
+
+        def classify(self, image_bytes: bytes):  # noqa: ANN202 - always raises
+            raise NoDetectionError("no_detection")
+
+    monkeypatch.setattr("main.get_classifier", lambda model=None: EmptyDetector())
+    response = _post_image(client, _png_bytes((90, 90, 90)))
+    assert response.status_code == 422
+    assert response.json() == {"detail": "no_detection"}
 
 
 def test_rejects_bad_type(client: TestClient) -> None:
