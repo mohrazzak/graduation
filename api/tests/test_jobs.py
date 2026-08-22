@@ -224,6 +224,10 @@ def test_model3d_without_a_key_fails_with_a_reason(
     body = _wait(client, job_id, timeout=60)
     assert body["status"] == "error"
     assert body["detail"] == "no_api_key"
+    assert body["timing"]["elapsed_ms"] >= 0
+    # Credential validation happens before the first reconstruction stage, so
+    # the API truthfully reports no stage rather than inventing one.
+    assert body["timing"]["stages"] == []
 
 
 def test_model3d_rejects_an_unknown_source_job(client: TestClient) -> None:
