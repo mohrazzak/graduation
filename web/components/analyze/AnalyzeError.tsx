@@ -13,8 +13,9 @@ export interface AnalyzeErrorProps {
 
 // bad_file is the only kind with a distinct user remedy; the rest all mean
 // "the analysis service did not answer usefully — check it, then retry".
-const ERROR_KEY: Record<ApiErrorKind, "badFileType" | "predictionFailed"> = {
+const ERROR_KEY: Record<ApiErrorKind, "badFileType" | "noDetection" | "predictionFailed"> = {
   bad_file: "badFileType",
+  no_detection: "noDetection",
   server: "predictionFailed",
   network: "predictionFailed",
   timeout: "predictionFailed",

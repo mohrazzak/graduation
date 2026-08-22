@@ -1,39 +1,39 @@
 "use client";
-// Three probability rows in ramp colors, stagger-filling 60ms apart on mount.
+// Four detector-score rows. Scores are independent maxima, not probabilities.
 import { motion, useReducedMotion } from "framer-motion";
 import { useFormatter, useTranslations } from "next-intl";
-import { DAMAGE_TIERS } from "@/lib/tiers";
-import type { TierProbabilities } from "@/lib/types";
+import { DAMAGE_CLASSES } from "@/lib/damage-classes";
+import type { DamageScores } from "@/lib/types";
 
 export interface ConfidenceBarsProps {
-  probabilities: TierProbabilities;
+  scores: DamageScores;
 }
 
 const STAGGER_S = 0.06;
 const FILL_S = 0.4;
 
-export function ConfidenceBars({ probabilities }: ConfidenceBarsProps) {
+export function ConfidenceBars({ scores }: ConfidenceBarsProps) {
   const t = useTranslations();
   const format = useFormatter();
   const reduced = useReducedMotion() ?? false;
 
   return (
     <ul className="space-y-2">
-      {DAMAGE_TIERS.map((tier, index) => {
-        const probability = probabilities[tier.code];
+      {DAMAGE_CLASSES.map((entry, index) => {
+        const score = scores[entry.code];
         return (
-          <li key={tier.code} className="flex items-center gap-3">
+          <li key={entry.code} className="flex items-center gap-3">
             <span className="flex w-36 shrink-0 items-baseline gap-2">
-              <span className="font-mono text-xs text-muted">{tier.code}</span>
-              <span className="truncate text-xs">{t(`tiers.${tier.key}.name`)}</span>
+              <span className="font-mono text-xs text-muted">{entry.code}</span>
+              <span className="truncate text-xs">{t(`damageClasses.${entry.key}.name`)}</span>
             </span>
             <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-none bg-line">
               {/* Width (not scaleX) so the fill grows from the start edge in RTL too. */}
               <motion.span
                 className="block h-full"
-                style={{ backgroundColor: tier.color }}
+                style={{ backgroundColor: entry.color }}
                 initial={reduced ? false : { width: "0%" }}
-                animate={{ width: `${probability * 100}%` }}
+                animate={{ width: `${score * 100}%` }}
                 transition={
                   reduced
                     ? { duration: 0 }
@@ -42,7 +42,7 @@ export function ConfidenceBars({ probabilities }: ConfidenceBarsProps) {
               />
             </span>
             <span className="w-14 shrink-0 text-end font-mono text-xs">
-              {format.number(probability, {
+              {format.number(score, {
                 style: "percent",
                 maximumFractionDigits: 1,
               })}

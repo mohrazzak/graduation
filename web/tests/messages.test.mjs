@@ -15,3 +15,22 @@ test("both locales explain an invalid repair backend", async () => {
   assert.equal(typeof arabic.repair.errors.invalid_repair_backend, "string");
   assert.ok(arabic.repair.errors.invalid_repair_backend.length > 0);
 });
+
+const keyPaths = (value, prefix = "") =>
+  Object.entries(value).flatMap(([key, child]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    return child && typeof child === "object" && !Array.isArray(child)
+      ? keyPaths(child, path)
+      : [path];
+  });
+
+test("English and Arabic message contracts stay in exact parity", async () => {
+  const [english, arabic] = await Promise.all([messages("en"), messages("ar")]);
+  assert.deepEqual(keyPaths(arabic).sort(), keyPaths(english).sort());
+  assert.deepEqual(Object.keys(english.damageClasses), [
+    "noDamage",
+    "slightModerate",
+    "heavyVeryHeavy",
+    "totalDamage",
+  ]);
+});

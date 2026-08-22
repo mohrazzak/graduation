@@ -117,6 +117,23 @@ test("saves a ready artifact when the base-save notice was dismissed after retai
   controller.dispose();
 });
 
+test("before and after 3D targets remain independent", async () => {
+  const calls = [];
+  const controller = new ArtifactPersistenceController(async (...args) => {
+    calls.push(args.slice(0, 3));
+    return true;
+  });
+  controller.update(target({ kind: "model3d_before", jobId: "before-1" }));
+  await settle();
+  controller.update(target({ kind: "model3d_after", jobId: "after-1" }));
+  await settle();
+  assert.deepEqual(calls, [
+    ["analysis-1", "model3d_before", "before-1"],
+    ["analysis-1", "model3d_after", "after-1"],
+  ]);
+  controller.dispose();
+});
+
 test("replay-safe disposal ignores a Strict Mode effect replay and disposes on real unmount", async () => {
   const persistence = await import("../lib/artifactPersistence.mts");
   assert.equal(typeof persistence.createReplaySafeDisposal, "function");

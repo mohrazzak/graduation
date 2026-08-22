@@ -1,9 +1,14 @@
 // Single FastAPI client: ALL frontend -> API traffic goes through here.
 // Throws ApiError; components translate by .kind (messages here are developer-facing).
-import { DAMAGE_TIERS, getTier, type TierCode } from "./tiers";
-import type { ModelInfo, Prediction, TierProbabilities } from "./types";
+import { DAMAGE_CLASSES, getDamageClass } from "./damage-classes";
+import type {
+  DamageDetection,
+  DamageScores,
+  ModelInfo,
+  Prediction,
+} from "./types";
 
-export type ApiErrorKind = "bad_file" | "server" | "network" | "timeout";
+export type ApiErrorKind = "bad_file" | "no_detection" | "server" | "network" | "timeout";
 
 export class ApiError extends Error {
   constructor(
@@ -37,7 +42,7 @@ export async function predictDamage(
     { method: "POST", body: form },
     PREDICT_TIMEOUT_MS,
   );
-  return toPrediction(body);
+  return parsePrediction(body);
 }
 
 // GET /models — the classifier roster the picker renders. Unavailable entries
@@ -112,6 +117,9 @@ async function requestJson(
     }
     if (!response.ok) {
       const detail = await readDetail(response);
+      if (detail === "no_detection") {
+        throw new ApiError("no_detection", detail);
+      }
       if (response.status === 400) {
         throw new ApiError("bad_file", detail ?? "The API rejected the file (HTTP 400)");
       }
@@ -181,21 +189,20 @@ function toModelInfo(entry: unknown): ModelInfo {
 
 // Validates the untrusted /predict body against the Prediction contract.
 // Anything off-shape means the API broke its contract -> "server" error.
-function toPrediction(body: unknown): Prediction {
+export function parsePrediction(body: unknown): Prediction {
   if (typeof body !== "object" || body === null) {
     throw contractViolation("body is not an object");
   }
   const raw = body as Record<string, unknown>;
 
-  if (typeof raw.tier !== "string") {
-    throw contractViolation("tier is missing or not a string");
+  if (typeof raw.class_code !== "string") {
+    throw contractViolation("class_code is missing or not a string");
   }
-  let tier: TierCode;
+  let classCode;
   try {
-    // getTier both validates and narrows to TierCode.
-    tier = getTier(raw.tier).code;
+    classCode = getDamageClass(raw.class_code).code;
   } catch {
-    throw contractViolation(`tier ${raw.tier} is not NC, PC, or GC`);
+    throw contractViolation(`class_code ${raw.class_code} is unknown`);
   }
 
   const confidence = raw.confidence;
@@ -208,47 +215,77 @@ function toPrediction(body: unknown): Prediction {
     throw contractViolation("confidence is not a number in 0..1");
   }
 
-  const rawProbabilities = raw.probabilities;
+  const rawScores = raw.scores;
   if (
-    typeof rawProbabilities !== "object" ||
-    rawProbabilities === null ||
-    Array.isArray(rawProbabilities)
+    typeof rawScores !== "object" ||
+    rawScores === null ||
+    Array.isArray(rawScores)
   ) {
-    throw contractViolation("probabilities is not a tier-keyed object");
+    throw contractViolation("scores is not a class-keyed object");
   }
-  const entries = rawProbabilities as Record<string, unknown>;
-  // Build by iterating the scale, so a missing or extra key cannot slip through.
-  const probabilities = {} as TierProbabilities;
-  for (const { code } of DAMAGE_TIERS) {
+  const entries = rawScores as Record<string, unknown>;
+  const scores = {} as DamageScores;
+  for (const { code } of DAMAGE_CLASSES) {
     const value = entries[code];
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw contractViolation(`probabilities.${code} is missing or not a number`);
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      value < 0 ||
+      value > 1
+    ) {
+      throw contractViolation(`scores.${code} is not a number in 0..1`);
     }
-    probabilities[code] = value;
+    scores[code] = value;
   }
 
-  const damagePercent = raw.damage_percent;
-  if (
-    typeof damagePercent !== "number" ||
-    !Number.isFinite(damagePercent) ||
-    damagePercent < 0 ||
-    damagePercent > 100
-  ) {
-    throw contractViolation("damage_percent is not a number in 0..100");
+  if (!Array.isArray(raw.detections) || raw.detections.length === 0) {
+    throw contractViolation("detections is missing or empty");
   }
-
-  const heatmap = raw.heatmap_base64;
-  if (typeof heatmap !== "string" && heatmap !== null && heatmap !== undefined) {
-    throw contractViolation("heatmap_base64 is not a string or null");
+  const detections: DamageDetection[] = raw.detections.map((entry, index) => {
+    if (typeof entry !== "object" || entry === null) {
+      throw contractViolation(`detections.${index} is not an object`);
+    }
+    const detection = entry as Record<string, unknown>;
+    const box = detection.box as Record<string, unknown> | null;
+    if (typeof detection.class_code !== "string" || !box) {
+      throw contractViolation(`detections.${index} is malformed`);
+    }
+    const detectedClass = getDamageClass(detection.class_code).code;
+    const detectedConfidence = detection.confidence;
+    const coordinates = [box.x1, box.y1, box.x2, box.y2];
+    if (
+      typeof detectedConfidence !== "number" ||
+      detectedConfidence < 0 ||
+      detectedConfidence > 1 ||
+      coordinates.some(
+        (value) => typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1,
+      ) ||
+      (box.x1 as number) > (box.x2 as number) ||
+      (box.y1 as number) > (box.y2 as number)
+    ) {
+      throw contractViolation(`detections.${index} has invalid values`);
+    }
+    return {
+      class_code: detectedClass,
+      confidence: detectedConfidence,
+      box: {
+        x1: box.x1 as number,
+        y1: box.y1 as number,
+        x2: box.x2 as number,
+        y2: box.y2 as number,
+      },
+    };
+  });
+  if (scores[classCode] !== confidence) {
+    throw contractViolation("confidence does not match the selected class score");
   }
 
   return {
-    tier,
+    class_code: classCode,
     confidence,
-    probabilities,
-    damage_percent: damagePercent,
+    scores,
+    detections,
     model: toModelInfo(raw.model),
-    heatmap_base64: typeof heatmap === "string" ? heatmap : null,
   };
 }
 

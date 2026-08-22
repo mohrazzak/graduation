@@ -4,12 +4,11 @@
 // hazard banner.
 import { type ReactNode } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { TierStrip } from "@/components/ui/TierStrip";
+import { DamageStrip } from "@/components/ui/DamageStrip";
 import { CornerTicks } from "@/components/ui/CornerTicks";
-import { getTier, isAlertTier } from "@/lib/tiers";
+import { getDamageClass, severityOf } from "@/lib/damage-classes";
 import type { Prediction } from "@/lib/types";
 import { ConfidenceBars } from "./ConfidenceBars";
-import { DamageGauge } from "./DamageGauge";
 
 export interface ResultPanelProps {
   prediction: Prediction;
@@ -20,8 +19,8 @@ export interface ResultPanelProps {
 export function ResultPanel({ prediction, children }: ResultPanelProps) {
   const t = useTranslations();
   const format = useFormatter();
-  const tier = getTier(prediction.tier);
-  const alert = isAlertTier(tier.code);
+  const entry = getDamageClass(prediction.class_code);
+  const alert = prediction.class_code === "TD";
 
   return (
     <section
@@ -36,20 +35,27 @@ export function ResultPanel({ prediction, children }: ResultPanelProps) {
       <div className="relative p-5 sm:p-6">
         <CornerTicks />
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <DamageGauge value={prediction.damage_percent} tier={tier.code} />
+          <div>
+            <span className="block text-xs uppercase tracking-wider text-muted">
+              {t("analyze.severity")}
+            </span>
+            <span className="font-mono text-3xl font-semibold">
+              {severityOf(prediction.class_code)}/4
+            </span>
+          </div>
           <div className="text-end">
-            <span className="font-mono text-xs text-muted">{tier.code}</span>
+            <span className="font-mono text-xs text-muted">{entry.code}</span>
             <h2
               className={`font-display text-2xl leading-tight font-extrabold uppercase tracking-tight ${
                 alert ? "text-alert" : ""
               }`}
-              style={alert ? undefined : { color: tier.color }}
+              style={alert ? undefined : { color: entry.color }}
             >
-              {t(`tiers.${tier.key}.name`)}
+              {t(`damageClasses.${entry.key}.name`)}
             </h2>
           </div>
         </div>
-        <TierStrip size="md" activeTier={tier.code} className="mt-5" />
+        <DamageStrip active={entry.code} className="mt-5" />
         <p className="mt-5 flex items-baseline gap-3">
           <span className="text-xs uppercase tracking-wider text-muted">
             {t("analyze.confidence")}
@@ -62,7 +68,8 @@ export function ResultPanel({ prediction, children }: ResultPanelProps) {
           </span>
         </p>
         <div className="mt-5">
-          <ConfidenceBars probabilities={prediction.probabilities} />
+          <ConfidenceBars scores={prediction.scores} />
+          <p className="mt-2 text-xs text-muted">{t("analyze.scoresNote")}</p>
         </div>
         <p className="mt-5 flex flex-wrap items-baseline gap-2 border-t border-line pt-4 text-xs text-muted">
           <span className="uppercase tracking-wider">{t("analyze.modelUsed")}</span>

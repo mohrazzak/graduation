@@ -10,14 +10,14 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { policyFor } from "@/lib/services";
-import type { TierCode } from "@/lib/tiers";
+import type { DamageCode } from "@/lib/damage-classes";
 import { ModelPanel } from "./ModelPanel";
 import { RepairPanel } from "./RepairPanel";
 import type { SaveStatus } from "./useSaveAnalysis";
 
 export interface ServiceRailProps {
   file: File;
-  tier: TierCode;
+  classCode: DamageCode;
   sourceSrc: string | null;
   /** Row generated artifacts attach to; null until the analysis has saved. */
   analysisId: string | null;
@@ -27,13 +27,13 @@ export interface ServiceRailProps {
 
 export function ServiceRail({
   file,
-  tier,
+  classCode,
   sourceSrc,
   analysisId,
   analysisStatus,
 }: ServiceRailProps) {
   const t = useTranslations();
-  const policy = policyFor(tier);
+  const policy = policyFor(classCode);
   const [repairedJobId, setRepairedJobId] = useState<string | null>(null);
   const [restoreOpen, setRestoreOpen] = useState(policy.restorePreselected);
 
@@ -47,7 +47,7 @@ export function ServiceRail({
         restoreOpen ? (
           <RepairPanel
             file={file}
-            tier={tier}
+            classCode={classCode}
             sourceSrc={sourceSrc}
             analysisId={analysisId}
             analysisStatus={analysisStatus}

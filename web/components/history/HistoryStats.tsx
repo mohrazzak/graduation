@@ -4,7 +4,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { useFormatter, useTranslations } from "next-intl";
 import { CornerTicks } from "@/components/ui/CornerTicks";
-import { DAMAGE_TIERS } from "@/lib/tiers";
+import { DAMAGE_CLASSES } from "@/lib/damage-classes";
 import type { Analysis } from "@/lib/types";
 
 export interface HistoryStatsProps {
@@ -17,8 +17,9 @@ export function HistoryStats({ analyses }: HistoryStatsProps) {
   const t = useTranslations("history.stats");
   const format = useFormatter();
   const reduced = useReducedMotion() ?? false;
-  const counts = DAMAGE_TIERS.map(
-    (tier) => analyses.filter((analysis) => analysis.tier === tier.code).length,
+  const scale = DAMAGE_CLASSES;
+  const counts = scale.map((entry) =>
+    analyses.filter((analysis) => analysis.scale_version === "raed4" && analysis.class_code === entry.code).length,
   );
   const max = Math.max(...counts, 1);
   const average =
@@ -43,7 +44,7 @@ export function HistoryStats({ analyses }: HistoryStatsProps) {
         <div className="min-w-48 flex-1">
           <p className="text-xs uppercase tracking-wider text-muted">{t("distribution")}</p>
           <ul className="mt-2 flex h-16 items-end gap-1.5">
-            {DAMAGE_TIERS.map((tier, index) => {
+            {scale.map((tier, index) => {
               const count = counts[index] ?? 0;
               return (
                 <li key={tier.code} className="flex h-full flex-1 flex-col gap-1">

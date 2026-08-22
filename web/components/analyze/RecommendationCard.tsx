@@ -2,17 +2,17 @@
 // GC is the only tier that gets the alert treatment and the hazard stripe.
 import { useTranslations } from "next-intl";
 import { CornerTicks } from "@/components/ui/CornerTicks";
-import { getTier, isAlertTier, type TierCode } from "@/lib/tiers";
+import { getDamageClass, type DamageCode } from "@/lib/damage-classes";
 
 export interface RecommendationCardProps {
-  tier: TierCode;
+  classCode: DamageCode;
 }
 
-export function RecommendationCard({ tier }: RecommendationCardProps) {
+export function RecommendationCard({ classCode }: RecommendationCardProps) {
   const t = useTranslations();
-  const entry = getTier(tier);
-  const alert = isAlertTier(tier);
-  const items = t.raw(`tiers.${entry.key}.recommendation.items`) as string[];
+  const entry = getDamageClass(classCode);
+  const alert = classCode === "TD";
+  const items = t.raw(`damageClasses.${entry.key}.recommendation.items`) as string[];
 
   return (
     <section
@@ -34,7 +34,7 @@ export function RecommendationCard({ tier }: RecommendationCardProps) {
           }`}
           style={alert ? undefined : { color: entry.color }}
         >
-          {t(`tiers.${entry.key}.recommendation.title`)}
+          {t(`damageClasses.${entry.key}.recommendation.title`)}
         </h3>
         <ul className="mt-4 space-y-2">
           {items.map((item) => (

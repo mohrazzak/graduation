@@ -31,7 +31,7 @@
   },
   "landing": {
     "heroTitle": "HOW BADLY IS IT DAMAGED?",
-    "heroSub": "AI structural damage assessment: non-collapse, partial, global.",
+    "heroSub": "Raed's detector assesses four destruction levels and locates each damaged building.",
     "ctaTry": "Try the demo",
     "howTitle": "How assessment works",
     "steps": {
@@ -41,14 +41,14 @@
       },
       "analyze": {
         "title": "Analyze",
-        "description": "The model scores all three collapse classes and returns a verdict with confidence and an estimated damage percentage."
+        "description": "The model detects buildings, scores four destruction classes, and returns normalized damage boxes."
       },
       "save": {
         "title": "Save",
-        "description": "Each assessment is stored in your history with the photo, the class probabilities, and which model produced the verdict."
+        "description": "Each assessment is stored with detector scores, boxes, restoration, and independent before/after 3D outputs."
       }
     },
-    "levelsTitle": "The three collapse classes",
+    "levelsTitle": "The four destruction classes",
     "levelsSub": "Every photo lands on one scale, from a standing structure to rubble.",
     "levelPhotoAlt": "Example building photo — {name}"
   },
@@ -93,6 +93,12 @@
       }
     }
   },
+  "damageClasses": {
+    "noDamage": { "name": "No Damage", "description": "No visible structural damage was detected.", "recommendation": { "title": "Document and monitor", "items": ["Keep this assessment for comparison", "Inspect periodically", "Use an engineer for any hidden concern"] } },
+    "slightModerate": { "name": "Slight / Moderate Damage", "description": "Localized repairable damage was detected.", "recommendation": { "title": "Targeted repair", "items": ["Restrict access near damaged areas", "Arrange an engineering inspection", "Repair the affected elements"] } },
+    "heavyVeryHeavy": { "name": "Heavy / Very Heavy Damage", "description": "Major structural damage was detected.", "recommendation": { "title": "Urgent structural intervention", "items": ["Evacuate the affected area", "Shore unstable elements", "Commission a full structural assessment"] } },
+    "totalDamage": { "name": "Total Damage", "description": "Destruction is extensive or complete.", "recommendation": { "title": "Secure and rebuild", "items": ["Keep everyone outside the exclusion zone", "Plan controlled clearance with engineers", "Treat reconstruction as conceptual until surveyed"] } }
+  },
   "analyze": {
     "title": "Analyze",
     "dropzone": {
@@ -108,9 +114,11 @@
       "> NORMALIZING EXPOSURE ....... OK",
       "> EDGE DENSITY MAP ........... OK",
       "> LOCATING STRUCTURE ......... OK",
-      "> SCORING 3 COLLAPSE CLASSES ..."
+      "> SCORING 4 DESTRUCTION CLASSES ..."
     ],
     "confidence": "Confidence",
+    "severity": "Destruction level",
+    "scoresNote": "Highest detector confidence observed for each class; these scores are not probabilities and do not sum to 100%.",
     "heatmapShow": "Show heatmap",
     "heatmapHide": "Hide heatmap",
     "heatmapAlt": "Grad-CAM heatmap overlay marking the regions that influenced the verdict",
@@ -120,6 +128,7 @@
     "resultAnnouncement": "Assessment complete: {name}.",
     "errors": {
       "badFileType": "Unsupported file type. Upload a JPEG, PNG or WebP image.",
+      "noDetection": "No building detection cleared the confidence threshold. This image cannot be assessed; it has not been labeled No Damage. Try a clearer, closer photo.",
       "fileTooLarge": "File exceeds 10 MB. Resize or compress the photo, then retry.",
       "predictionFailed": "The analysis service did not respond. Check that the API is running, then retry.",
       "saveFailed": "The result was not saved to history. Check your connection, then retry.",
@@ -149,6 +158,7 @@
       "cta": "Run analysis"
     },
     "confidence": "Confidence",
+    "legacy": "Legacy PHI-3 scale",
     "deleteConfirm": "Delete this assessment? This cannot be undone.",
     "deleted": "Assessment deleted.",
     "viewDetails": "View details",
@@ -181,8 +191,8 @@
   "howItWorks": {
     "title": "How it works",
     "scale": {
-      "title": "The three collapse classes",
-      "intro": "Every photo is classified into one of three collapse classes, from a standing structure to rubble. The classes come from PHI-Net's Collapse Mode task, which grades a building by how much of its structural system survived rather than by cosmetic appearance.",
+      "title": "The four destruction classes",
+      "intro": "Raed's detector locates buildings and reports the most severe observed class: no damage, slight/moderate, heavy/very heavy, or total damage.",
       "details": {
         "nonCollapse": "The structural system is intact. Damage, where present, is confined to finishes: surface cracking, spalled render, broken glazing. Load paths are continuous. Note that this class covers minor damage as well as none.",
         "partialCollapse": "One or more structural elements have failed — a floor slab, a bay, a section of load-bearing wall — while the remaining frame still carries load. Progressive collapse is the governing risk.",
@@ -291,6 +301,7 @@
     "title": "2D restoration",
     "intro": "Rebuild the damaged facade into a plausible restored view of the same building.",
     "run": "Run restoration",
+    "runSelection": "Reconstruct selected area",
     "runAnyway": "Run reconstruction anyway",
     "rerun": "Run again",
     "notNeeded": "No restoration needed — the structure is standing. Reconstruct it in 3D instead.",
@@ -301,6 +312,17 @@
     "promptLabel": "Restoration instruction",
     "promptPlaceholder": "Leave blank to use the instruction tuned to this damage class.",
     "promptHint": "The text below is sent to the image model verbatim. Editing it and running again is a real re-run.",
+    "mask": {
+      "intro": "Review the automatic selection, then draw or erase the exact damaged area to reconstruct. Pixels outside the white selection stay unchanged.",
+      "canvasLabel": "Editable repair selection mask",
+      "brush": "Brush",
+      "erase": "Erase",
+      "size": "Brush size",
+      "undo": "Undo",
+      "reset": "Reset automatic mask",
+      "clear": "Clear",
+      "empty": "Select at least one damaged area before reconstruction."
+    },
     "stages": {
       "isolating": "Isolating the building",
       "edges": "Mapping structural edges",
@@ -341,6 +363,9 @@
   "model3d": {
     "title": "3D reconstruction",
     "intro": "Turn the photo into a textured 3D model you can orbit, inspect, and download.",
+    "compareIntro": "Generate either model explicitly. Each run uses service credits and remains independent.",
+    "before": { "title": "Before rebuild", "description": "3D model from the original damaged photo.", "run": "Generate before model" },
+    "after": { "title": "After reconstruction", "description": "3D model from the restored 2D result.", "run": "Generate after model", "disabled": "Complete the selected 2D reconstruction first." },
     "runOriginal": "Reconstruct from photo",
     "runRepaired": "Reconstruct from restored",
     "source": {

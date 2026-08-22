@@ -13,7 +13,7 @@ export interface ArtifactPersistenceTarget {
   analysisStatus: AnalysisPersistenceStatus;
   jobId: string | null;
   ready: boolean;
-  kind: "repaired" | "model3d";
+  kind: "repaired" | "model3d_before" | "model3d_after";
 }
 
 export interface ArtifactPersistenceSnapshot {

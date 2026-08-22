@@ -56,6 +56,7 @@ export function HistoryClient() {
   // opened analysis needs them, and a GLB is far too big to sign up front.
   const [repairedArtifacts, setRepairedArtifacts] = useState<ArtifactMap>({});
   const [modelArtifacts, setModelArtifacts] = useState<ArtifactMap>({});
+  const [beforeModelArtifacts, setBeforeModelArtifacts] = useState<ArtifactMap>({});
   const [selected, setSelected] = useState<Analysis | null>(null);
   const [deletedToast, setDeletedToast] = useState(false);
   const artifactControllerRef = useRef<SignedArtifactController | null>(null);
@@ -85,7 +86,7 @@ export function HistoryClient() {
 
   const signArtifact = useCallback(
     (
-      kind: "repaired" | "model",
+      kind: "repaired" | "model" | "model-before",
       analysisId: string,
       path: string,
       setArtifacts: ArtifactMapSetter,
@@ -105,7 +106,7 @@ export function HistoryClient() {
 
   const failArtifact = useCallback(
     (
-      kind: "repaired" | "model",
+      kind: "repaired" | "model" | "model-before",
       analysisId: string,
       setArtifacts: ArtifactMapSetter,
     ) => {
@@ -134,6 +135,15 @@ export function HistoryClient() {
     [signArtifact],
   );
 
+  const signBeforeModelArtifact = useCallback(
+    (analysis: Analysis) => {
+      if (analysis.model3d_before_path !== null) {
+        signArtifact("model-before", analysis.id, analysis.model3d_before_path, setBeforeModelArtifacts);
+      }
+    },
+    [signArtifact],
+  );
+
   const open = useCallback(
     (analysis: Analysis) => {
       setSelected(analysis);
@@ -156,8 +166,11 @@ export function HistoryClient() {
       if (analysis.model3d_path !== null && modelArtifacts[analysis.id] === undefined) {
         signModelArtifact(analysis);
       }
+      if (analysis.model3d_before_path !== null && beforeModelArtifacts[analysis.id] === undefined) {
+        signBeforeModelArtifact(analysis);
+      }
     },
-    [heatmapUrls, modelArtifacts, repairedArtifacts, signModelArtifact, signRepairedArtifact],
+    [beforeModelArtifacts, heatmapUrls, modelArtifacts, repairedArtifacts, signBeforeModelArtifact, signModelArtifact, signRepairedArtifact],
   );
 
   const retryRepairedArtifact = useCallback(() => {
@@ -167,6 +180,10 @@ export function HistoryClient() {
   const retryModelArtifact = useCallback(() => {
     if (selected !== null) signModelArtifact(selected);
   }, [selected, signModelArtifact]);
+
+  const retryBeforeModelArtifact = useCallback(() => {
+    if (selected !== null) signBeforeModelArtifact(selected);
+  }, [selected, signBeforeModelArtifact]);
 
   const failRepairedArtifact = useCallback(() => {
     if (selected !== null) {
@@ -178,6 +195,10 @@ export function HistoryClient() {
     if (selected !== null) {
       failArtifact("model", selected.id, setModelArtifacts);
     }
+  }, [failArtifact, selected]);
+
+  const failBeforeModelArtifact = useCallback(() => {
+    if (selected !== null) failArtifact("model-before", selected.id, setBeforeModelArtifacts);
   }, [failArtifact, selected]);
 
   const handleDelete = useCallback(async (): Promise<boolean> => {
@@ -226,10 +247,13 @@ export function HistoryClient() {
           heatmapUrl={heatmapUrls[selected.id] ?? null}
           repairedArtifact={repairedArtifacts[selected.id] ?? { status: "loading" }}
           modelArtifact={modelArtifacts[selected.id] ?? { status: "loading" }}
+          beforeModelArtifact={beforeModelArtifacts[selected.id] ?? { status: "loading" }}
           onRetryRepaired={retryRepairedArtifact}
           onRetryModel={retryModelArtifact}
+          onRetryBeforeModel={retryBeforeModelArtifact}
           onRepairedLoadError={failRepairedArtifact}
           onModelLoadError={failModelArtifact}
+          onBeforeModelLoadError={failBeforeModelArtifact}
           onDelete={handleDelete}
           onClose={() => setSelected(null)}
         />

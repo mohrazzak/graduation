@@ -2,7 +2,7 @@
 -- HOW TO RUN: paste this whole file into the Supabase dashboard SQL editor
 -- (SQL Editor -> New query -> Run). One-time setup per project.
 --
--- This is the CURRENT schema (three collapse tiers). A fresh project needs only
+-- This is the CURRENT schema (versioned legacy PHI-3 and active Raed-4). A fresh project needs only
 -- this file — migrations/ applies only to a database still on the old
 -- six-level shape.
 --
@@ -22,13 +22,22 @@ create table public.analyses (
   user_id        uuid not null references auth.users(id) on delete cascade,
   image_path     text not null,          -- storage path of uploaded photo
   heatmap_path   text,                   -- storage path of heatmap (nullable)
-  tier           text not null check (tier in ('NC', 'PC', 'GC')),
+  scale_version  text not null default 'raed4' check (scale_version in ('phi3', 'raed4')),
+  tier           text check (tier in ('NC', 'PC', 'GC')),
   confidence     real not null check (confidence between 0 and 1),
-  probabilities  jsonb not null,         -- {"NC":f,"PC":f,"GC":f}, sums ~1
-  damage_percent real not null check (damage_percent between 0 and 100),
+  probabilities  jsonb,
+  damage_percent real check (damage_percent between 0 and 100),
+  class_code     text check (class_code in ('ND', 'SMD', 'HVD', 'TD')),
+  scores         jsonb,
+  detections     jsonb,
   model_id       text not null,          -- which classifier produced the verdict
   repaired_path  text,                   -- restore pipeline output (nullable)
   model3d_path   text,                   -- 3D reconstruction output (nullable)
+  model3d_before_path text,              -- original-photo 3D output (nullable)
+  constraint analyses_version_payload_check check (
+    (scale_version = 'phi3' and tier is not null and probabilities is not null and damage_percent is not null and class_code is null and scores is null and detections is null)
+    or (scale_version = 'raed4' and tier is null and probabilities is null and damage_percent is null and class_code is not null and scores is not null and detections is not null)
+  ),
   created_at     timestamptz not null default now()
 );
 

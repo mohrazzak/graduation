@@ -1,6 +1,6 @@
 // The ONLY place the frontend polls the job API. Restoration and 3D take far
 // longer than a request, so both are started, then polled until they settle.
-import type { TierCode } from "./tiers";
+import type { DamageCode } from "./damage-classes";
 
 export type JobStatus = "queued" | "running" | "done" | "error";
 
@@ -17,6 +17,18 @@ export interface JobState {
   artifacts: string[];
   /** Message KEY on failure (quota_exceeded, no_api_key, …), never prose. */
   detail: string | null;
+  timing: JobTiming;
+}
+
+export interface StageTiming {
+  key: string;
+  status: "running" | "done" | "error";
+  elapsed_ms: number;
+}
+
+export interface JobTiming {
+  elapsed_ms: number;
+  stages: StageTiming[];
 }
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -49,15 +61,24 @@ async function startJob(path: string, body: FormData): Promise<string> {
   return id;
 }
 
-/** Start a 2D restoration. The tier is required — restoration is gated on it. */
+/** Prepare the automatic building mask that seeds the editor. */
+export function startMaskPreparation(file: Blob): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  return startJob("/jobs/mask", form);
+}
+
+/** Start a 2D restoration through an explicit user-edited mask. */
 export function startRepair(
   file: Blob,
-  tier: TierCode,
+  mask: Blob,
+  classCode: DamageCode,
   prompt?: string,
 ): Promise<string> {
   const form = new FormData();
   form.append("file", file);
-  form.append("tier", tier);
+  form.append("mask", mask, "selection-mask.png");
+  form.append("class_code", classCode);
   if (prompt) form.append("prompt", prompt);
   return startJob("/jobs/repair", form);
 }
@@ -72,14 +93,13 @@ export function startModel3d(
   return startJob("/jobs/model3d", form);
 }
 
-export async function getJob(jobId: string): Promise<JobState> {
-  const response = await fetch(`${BASE}/jobs/${encodeURIComponent(jobId)}`, {
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    throw new JobError(response.status === 404 ? "job_expired" : "server");
+export function parseJobState(value: unknown): JobState {
+  if (typeof value !== "object" || value === null) throw new JobError("bad_response");
+  const raw = value as Record<string, unknown>;
+  const rawTiming = raw.timing as Record<string, unknown> | null;
+  if (!rawTiming || typeof rawTiming.elapsed_ms !== "number" || !Array.isArray(rawTiming.stages)) {
+    throw new JobError("bad_response");
   }
-  const raw = (await response.json()) as Record<string, unknown>;
   const stage = raw.stage as Record<string, unknown> | null;
   return {
     status: (raw.status as JobStatus) ?? "error",
@@ -93,7 +113,33 @@ export async function getJob(jobId: string): Promise<JobState> {
         : null,
     artifacts: Array.isArray(raw.artifacts) ? (raw.artifacts as string[]) : [],
     detail: typeof raw.detail === "string" ? raw.detail : null,
+    timing: {
+      elapsed_ms: Math.max(0, rawTiming.elapsed_ms),
+      stages: rawTiming.stages.map((entry) => {
+        const item = entry as Record<string, unknown>;
+        if (
+          typeof item.key !== "string" ||
+          !["running", "done", "error"].includes(String(item.status)) ||
+          typeof item.elapsed_ms !== "number"
+        ) throw new JobError("bad_response");
+        return {
+          key: item.key,
+          status: item.status as StageTiming["status"],
+          elapsed_ms: Math.max(0, item.elapsed_ms),
+        };
+      }),
+    },
   };
+}
+
+export async function getJob(jobId: string): Promise<JobState> {
+  const response = await fetch(`${BASE}/jobs/${encodeURIComponent(jobId)}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new JobError(response.status === 404 ? "job_expired" : "server");
+  }
+  return parseJobState(await response.json());
 }
 
 /**

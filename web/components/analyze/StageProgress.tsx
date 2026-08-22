@@ -6,13 +6,14 @@
 // progress at all, so it shows elapsed time rather than a fake percentage.
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import type { JobStage, JobStatus } from "@/lib/jobs";
+import type { JobStage, JobStatus, JobTiming } from "@/lib/jobs";
 
 export interface StageProgressProps {
   /** Ordered stage keys for this service, from the API contract. */
   stageKeys: readonly string[];
   current: JobStage | null;
   status: JobStatus;
+  timing: JobTiming;
   /** Message key namespace: "repair" or "model3d". */
   service: string;
   /** Which stage has no progress signal and shows elapsed time instead. */
@@ -21,19 +22,25 @@ export interface StageProgressProps {
 
 /** Counts up from mount. Mounted only while the indefinite stage is running,
  *  so entering and leaving that stage needs no state resetting. */
-function ElapsedSeconds() {
-  const [seconds, setSeconds] = useState(0);
+function formatElapsed(milliseconds: number): string {
+  return `${(milliseconds / 1000).toFixed(1)}s`;
+}
+
+function LiveElapsed({ measuredMs }: { measuredMs: number }) {
+  const [startedAt] = useState(() => Date.now() - measuredMs);
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = window.setInterval(() => setSeconds((n) => n + 1), 1000);
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
-  return <>{seconds > 0 ? `${seconds}s` : "..."}</>;
+  return <>{formatElapsed(Math.max(measuredMs, now - startedAt))}</>;
 }
 
 export function StageProgress({
   stageKeys,
   current,
   status,
+  timing,
   service,
   indefiniteKey,
 }: StageProgressProps) {
@@ -47,6 +54,7 @@ export function StageProgress({
           status === "done" || (current !== null && position < current.index);
         const active = current?.key === key && status === "running";
         const indefinite = active && key === indefiniteKey;
+        const measured = timing.stages.find((stage) => stage.key === key);
         return (
           <li
             key={key}
@@ -59,11 +67,21 @@ export function StageProgress({
               {t(`${service}.stages.${key}`)}
             </span>
             {done ? (
-              <span className="text-hazard">{t("services.ok")}</span>
+              <span className="text-hazard">
+                {measured ? formatElapsed(measured.elapsed_ms) : t("services.ok")}
+              </span>
             ) : active ? (
               <span className="text-hazard">
-                {indefinite ? <ElapsedSeconds /> : "..."}
+                {indefinite && measured ? (
+                  <LiveElapsed measuredMs={measured.elapsed_ms} />
+                ) : measured ? (
+                  formatElapsed(measured.elapsed_ms)
+                ) : (
+                  "..."
+                )}
               </span>
+            ) : measured?.status === "error" ? (
+              <span className="text-alert">{formatElapsed(measured.elapsed_ms)}</span>
             ) : null}
           </li>
         );

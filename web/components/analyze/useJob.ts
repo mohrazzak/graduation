@@ -13,7 +13,13 @@ export interface UseJob {
   reset: () => void;
 }
 
-const IDLE: JobState = { status: "queued", stage: null, artifacts: [], detail: null };
+const IDLE: JobState = {
+  status: "queued",
+  stage: null,
+  artifacts: [],
+  detail: null,
+  timing: { elapsed_ms: 0, stages: [] },
+};
 
 export function useJob(): UseJob {
   const [jobId, setJobId] = useState<string | null>(null);
@@ -41,6 +47,7 @@ export function useJob(): UseJob {
         stage: null,
         artifacts: [],
         detail: error instanceof JobError ? error.reason : "server",
+        timing: { elapsed_ms: 0, stages: [] },
       });
     } finally {
       if (run === runRef.current) setRunning(false);

@@ -4,7 +4,7 @@
 //   PC  the full pipeline, pre-selected: restore, then reconstruct
 //   GC  restoration allowed but WARNED: at total collapse the output is a
 //       conceptual reconstruction, not a repair plan
-import type { TierCode } from "./tiers";
+import type { DamageCode } from "./damage-classes";
 
 export interface ServicePolicy {
   /** Restoration offered at all? */
@@ -17,20 +17,26 @@ export interface ServicePolicy {
   readonly model3dPrimary: boolean;
 }
 
-export const SERVICE_POLICY: Readonly<Record<TierCode, ServicePolicy>> = {
-  NC: {
-    canRestore: false,
-    restorePreselected: false,
+export const SERVICE_POLICY: Readonly<Record<DamageCode, ServicePolicy>> = {
+  ND: {
+    canRestore: true,
+    restorePreselected: true,
     restoreWarns: false,
     model3dPrimary: true,
   },
-  PC: {
+  SMD: {
     canRestore: true,
     restorePreselected: true,
     restoreWarns: false,
     model3dPrimary: false,
   },
-  GC: {
+  HVD: {
+    canRestore: true,
+    restorePreselected: true,
+    restoreWarns: false,
+    model3dPrimary: false,
+  },
+  TD: {
     canRestore: true,
     restorePreselected: false,
     restoreWarns: true,
@@ -38,6 +44,6 @@ export const SERVICE_POLICY: Readonly<Record<TierCode, ServicePolicy>> = {
   },
 } as const;
 
-export function policyFor(tier: TierCode): ServicePolicy {
-  return SERVICE_POLICY[tier];
+export function policyFor(classCode: DamageCode): ServicePolicy {
+  return SERVICE_POLICY[classCode];
 }

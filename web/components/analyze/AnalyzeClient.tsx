@@ -3,15 +3,14 @@
 // scan -> POST /predict -> result + auto-save, owning preview/request lifecycles.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ReportDocument } from "@/components/report/ReportDocument";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import { ApiError, predictDamage, type ApiErrorKind } from "@/lib/api";
-import { getTier } from "@/lib/tiers";
+import { getDamageClass } from "@/lib/damage-classes";
 import type { Prediction } from "@/lib/types";
 import { AnalyzeError } from "./AnalyzeError";
 import { DropZone } from "./DropZone";
-import { HeatmapToggle } from "./HeatmapToggle";
+import { DetectionOverlay } from "./DetectionOverlay";
 import { ImageWithHeatmap } from "./ImageWithHeatmap";
 import { ModelPicker } from "./ModelPicker";
 import { RecommendationCard } from "./RecommendationCard";
@@ -38,12 +37,9 @@ export function AnalyzeClient() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
-  const [heatmapVisible, setHeatmapVisible] = useState(false);
   const [errorKind, setErrorKind] = useState<ApiErrorKind>("server");
   // Report identity is fixed the moment the verdict lands; deriving it at
   // render time would mint a new id/timestamp on every re-render.
-  const [reportId, setReportId] = useState<string | null>(null);
-  const [reportedAt, setReportedAt] = useState<Date | null>(null);
   const {
     status: saveStatus,
     errorCode: saveError,
@@ -76,9 +72,6 @@ export function AnalyzeClient() {
       setFile(next);
       setPreviewUrl(url);
       setPrediction(null);
-      setHeatmapVisible(false);
-      setReportId(null);
-      setReportedAt(null);
       resetSave();
       setPhase("ready");
     },
@@ -89,7 +82,6 @@ export function AnalyzeClient() {
     if (file === null || phase === "analyzing") return;
     const requestId = ++requestIdRef.current;
     setPhase("analyzing");
-    setHeatmapVisible(false);
     try {
       const [result] = await Promise.all([
         predictDamage(file, selectedModel ?? undefined),
@@ -98,8 +90,6 @@ export function AnalyzeClient() {
       if (requestId !== requestIdRef.current) return; // stale: user moved on
       setPrediction(result);
       setPhase("done");
-      setReportId(crypto.randomUUID().slice(0, 8).toUpperCase());
-      setReportedAt(new Date());
       save(file, result); // auto-save to history (spec section 9)
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
@@ -114,14 +104,9 @@ export function AnalyzeClient() {
     setFile(null);
     setPreviewUrl(null);
     setPrediction(null);
-    setHeatmapVisible(false);
-    setReportId(null);
-    setReportedAt(null);
     resetSave();
     setPhase("idle");
   }, [releasePreview, resetSave]);
-
-  const heatmapSrc = prediction?.heatmap_base64 ?? null;
 
   return (
     <div className="grid items-start gap-8 lg:grid-cols-2">
@@ -130,11 +115,14 @@ export function AnalyzeClient() {
           <ImageWithHeatmap
             src={previewUrl}
             alt={t("analyze.dropzone.previewAlt")}
-            heatmapSrc={heatmapSrc === null ? null : `data:image/png;base64,${heatmapSrc}`}
+            heatmapSrc={null}
             heatmapAlt={t("analyze.heatmapAlt")}
-            heatmapVisible={phase === "done" && heatmapVisible}
+            heatmapVisible={false}
           >
             {phase === "analyzing" ? <ScanOverlay /> : null}
+            {phase === "done" && prediction !== null ? (
+              <DetectionOverlay detections={prediction.detections} />
+            ) : null}
           </ImageWithHeatmap>
         ) : (
           <DropZone onFile={selectFile} />
@@ -156,15 +144,6 @@ export function AnalyzeClient() {
       <div className="flex flex-col gap-4">
         {phase === "done" && prediction !== null ? (
           <ResultPanel prediction={prediction}>
-            {heatmapSrc !== null ? (
-              <HeatmapToggle
-                visible={heatmapVisible}
-                onToggle={() => setHeatmapVisible((visible) => !visible)}
-              />
-            ) : null}
-            <Button variant="ghost" onClick={() => window.print()}>
-              {t("report.button")}
-            </Button>
             <Button variant="ghost" onClick={reset}>
               {t("common.actions.analyzeAnother")}
             </Button>
@@ -172,13 +151,13 @@ export function AnalyzeClient() {
         ) : null}
         {/* What to DO about the verdict — the reason a tier matters to a user. */}
         {phase === "done" && prediction !== null ? (
-          <RecommendationCard tier={prediction.tier} />
+          <RecommendationCard classCode={prediction.class_code} />
         ) : null}
         {/* What to do next with this building — gated by the tier. */}
         {phase === "done" && prediction !== null && file !== null ? (
           <ServiceRail
             file={file}
-            tier={prediction.tier}
+            classCode={prediction.class_code}
             sourceSrc={previewUrl}
             analysisId={analysisId}
             analysisStatus={saveStatus}
@@ -193,19 +172,6 @@ export function AnalyzeClient() {
         {phase === "error" ? (
           <AnalyzeError kind={errorKind} onRetry={() => void submit()} onReset={reset} />
         ) : null}
-        {phase === "done" && prediction !== null && reportId !== null && reportedAt !== null ? (
-          <ReportDocument
-            imageSrc={previewUrl}
-            heatmapSrc={heatmapSrc === null ? null : `data:image/png;base64,${heatmapSrc}`}
-            tier={prediction.tier}
-            confidence={prediction.confidence}
-            probabilities={prediction.probabilities}
-            damagePercent={prediction.damage_percent}
-            modelName={prediction.model.name}
-            reportId={reportId}
-            createdAt={reportedAt}
-          />
-        ) : null}
       </div>
 
       {saveStatus === "saved" ? (
@@ -218,7 +184,7 @@ export function AnalyzeClient() {
       <div aria-live="polite" role="status" className="sr-only">
         {phase === "done" && prediction !== null
           ? t("analyze.resultAnnouncement", {
-              name: t(`tiers.${getTier(prediction.tier).key}.name`),
+              name: t(`damageClasses.${getDamageClass(prediction.class_code).key}.name`),
             })
           : null}
       </div>

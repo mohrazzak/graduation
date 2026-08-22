@@ -17,18 +17,23 @@ type AnalysesRow = {
   user_id: string;
   image_path: string;
   heatmap_path: string | null;
+  scale_version: string;
   // 'NC' | 'PC' | 'GC', enforced by a check constraint. Typed as string here
   // and narrowed in queries.ts, so a hand-edited row is rejected rather than
   // trusted into the domain type.
-  tier: string;
+  tier: string | null;
   confidence: number;
   // jsonb: a tier-keyed object {"NC":f,"PC":f,"GC":f}. Untyped on purpose —
   // queries.ts validates it.
-  probabilities: Json;
-  damage_percent: number;
+  probabilities: Json | null;
+  damage_percent: number | null;
+  class_code: string | null;
+  scores: Json | null;
+  detections: Json | null;
   model_id: string;
   repaired_path: string | null;
   model3d_path: string | null;
+  model3d_before_path: string | null;
   created_at: string;
 };
 
@@ -37,13 +42,18 @@ type AnalysesInsert = {
   user_id: string;
   image_path: string;
   heatmap_path?: string | null;
-  tier: string;
+  scale_version: string;
+  tier?: string | null;
   confidence: number;
-  probabilities: Json;
-  damage_percent: number;
+  probabilities?: Json | null;
+  damage_percent?: number | null;
+  class_code?: string | null;
+  scores?: Json | null;
+  detections?: Json | null;
   model_id: string;
   repaired_path?: string | null;
   model3d_path?: string | null;
+  model3d_before_path?: string | null;
   created_at?: string;
 };
 

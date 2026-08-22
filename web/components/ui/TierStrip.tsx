@@ -4,13 +4,14 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { DAMAGE_TIERS, type TierCode } from "@/lib/tiers";
+import { DAMAGE_CLASSES, type DamageCode } from "@/lib/damage-classes";
 
 export type TierStripSize = "sm" | "md" | "lg";
 
 export interface TierStripProps {
   size: TierStripSize;
   /** Highlights this segment and dims the rest. */
-  activeTier?: TierCode;
+  activeTier?: TierCode | DamageCode;
   /** lg hero entrance: segments light up NC -> GC in sequence (reduced motion: all lit). */
   animateIn?: boolean;
   /** Exposes the strip to assistive tech; decorative (aria-hidden) when omitted. */
@@ -35,6 +36,9 @@ export function TierStrip({
   className,
 }: TierStripProps) {
   const reduced = useReducedMotion() ?? false;
+  const entries = activeTier && ["NC", "PC", "GC"].includes(activeTier)
+    ? DAMAGE_TIERS
+    : DAMAGE_CLASSES;
   const entrance = animateIn && !reduced;
   // Drop the entrance stagger once it has played so later activeTier changes
   // (hero caption cycling, result reveal) respond with a plain fast fade.
@@ -43,10 +47,10 @@ export function TierStrip({
     if (!entrance) return undefined;
     const id = window.setTimeout(
       () => setEntered(true),
-      (DAMAGE_TIERS.length * STAGGER_S + 0.25) * 1000,
+      (entries.length * STAGGER_S + 0.25) * 1000,
     );
     return () => window.clearTimeout(id);
-  }, [entrance]);
+  }, [entrance, entries.length]);
 
   return (
     <div
@@ -55,7 +59,7 @@ export function TierStrip({
         ? { role: "img", "aria-label": label }
         : { "aria-hidden": true })}
     >
-      {DAMAGE_TIERS.map((tier, index) => {
+      {entries.map((tier, index) => {
         const isActive = activeTier === tier.code;
         const dimmed = activeTier !== undefined && !isActive;
         return (

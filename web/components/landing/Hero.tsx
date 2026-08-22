@@ -1,13 +1,13 @@
 "use client";
 // Landing hero: display headline, CTA, and THE SCALE animating in while the
-// three tier captions cycle. Reduced motion swaps the cycling for a static legend.
+// four detector-class captions cycle. Reduced motion uses a static legend.
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { Button } from "@/components/ui/Button";
-import { TierStrip } from "@/components/ui/TierStrip";
-import { DAMAGE_TIERS, type DamageTier } from "@/lib/tiers";
+import { DamageStrip } from "@/components/ui/DamageStrip";
+import { DAMAGE_CLASSES, type DamageClass } from "@/lib/damage-classes";
 
 const CYCLE_MS = 2500;
 // Let the strip's NC -> GC light-up finish before the captions start.
@@ -17,7 +17,7 @@ export function Hero() {
   const t = useTranslations();
   const reduced = useReducedMotion() ?? false;
   const [index, setIndex] = useState<number | null>(null);
-  const active: DamageTier | null = index === null ? null : (DAMAGE_TIERS[index] ?? null);
+  const active: DamageClass | null = index === null ? null : (DAMAGE_CLASSES[index] ?? null);
 
   useEffect(() => {
     if (reduced) return undefined;
@@ -25,7 +25,7 @@ export function Hero() {
     const timeoutId = window.setTimeout(() => {
       setIndex(0);
       intervalId = window.setInterval(() => {
-        setIndex((current) => ((current ?? 0) + 1) % DAMAGE_TIERS.length);
+        setIndex((current) => ((current ?? 0) + 1) % DAMAGE_CLASSES.length);
       }, CYCLE_MS);
     }, ENTRANCE_MS);
     return () => {
@@ -61,19 +61,19 @@ export function Hero() {
         </div>
 
         <div className="mt-16 sm:mt-20">
-          <TierStrip size="lg" animateIn activeTier={reduced ? undefined : active?.code} />
+          <DamageStrip active={reduced ? undefined : active?.code} />
           {reduced ? (
             // Static legend: same information as the cycle, without motion.
             <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-              {DAMAGE_TIERS.map((tier) => (
+              {DAMAGE_CLASSES.map((tier) => (
                 <li key={tier.code} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                   <span className="font-mono text-xs" style={{ color: tier.color }}>
                     {tier.code}
                   </span>
                   <span className="font-display text-sm font-bold uppercase">
-                    {t(`tiers.${tier.key}.name`)}
+                    {t(`damageClasses.${tier.key}.name`)}
                   </span>
-                  <span className="text-sm text-muted">{t(`tiers.${tier.key}.description`)}</span>
+                  <span className="text-sm text-muted">{t(`damageClasses.${tier.key}.description`)}</span>
                 </li>
               ))}
             </ul>
@@ -93,10 +93,10 @@ export function Hero() {
                       {active.code}
                     </span>
                     <span className="font-display text-lg font-bold uppercase">
-                      {t(`tiers.${active.key}.name`)}
+                      {t(`damageClasses.${active.key}.name`)}
                     </span>
                     <span className="text-sm text-muted">
-                      {t(`tiers.${active.key}.description`)}
+                      {t(`damageClasses.${active.key}.description`)}
                     </span>
                   </motion.p>
                 ) : null}

@@ -2,11 +2,12 @@
 // upload/remove/signed-url and analyses CRUD over the browser Supabase client.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DAMAGE_TIERS, getTier } from "../tiers";
-import type { Analysis, Prediction, TierProbabilities } from "../types";
+import { DAMAGE_CLASSES, getDamageClass } from "../damage-classes";
+import type { Analysis, DamageDetection, DamageScores, Prediction, TierProbabilities } from "../types";
 import { isSupabaseConfigured } from "./auth";
 import { attachArtifactWithOperations } from "./artifactAttachment.mts";
 import { getSupabaseBrowserClient } from "./client";
-import type { Database } from "./database.types";
+import type { Database, Json } from "./database.types";
 
 export type QueryErrorCode =
   | "not_configured"
@@ -62,40 +63,21 @@ export async function saveAnalysis(input: {
   }
   uploaded.push(imagePath);
 
-  let heatmapPath: string | null = null;
-  if (input.prediction.heatmap_base64) {
-    heatmapPath = `${userId}/${id}_heatmap.png`;
-    try {
-      const heatmapBlob = base64ToBlob(
-        input.prediction.heatmap_base64,
-        "image/png",
-      );
-      const { error: heatmapError } = await supabase.storage
-        .from(BUCKET)
-        .upload(heatmapPath, heatmapBlob, { contentType: "image/png" });
-      if (heatmapError) {
-        throw heatmapError;
-      }
-      uploaded.push(heatmapPath);
-    } catch {
-      // Covers both a malformed base64 payload (atob throws) and an upload
-      // error; either way the already-stored photo must not be orphaned.
-      await removeQuietly(supabase, uploaded);
-      return { data: null, error: "upload_failed" };
-    }
-  }
-
   const { data: row, error: insertError } = await supabase
     .from("analyses")
     .insert({
       id,
       user_id: userId,
       image_path: imagePath,
-      heatmap_path: heatmapPath,
-      tier: input.prediction.tier,
+      heatmap_path: null,
+      scale_version: "raed4",
+      tier: null,
       confidence: input.prediction.confidence,
-      probabilities: input.prediction.probabilities,
-      damage_percent: input.prediction.damage_percent,
+      probabilities: null,
+      damage_percent: null,
+      class_code: input.prediction.class_code,
+      scores: input.prediction.scores,
+      detections: input.prediction.detections as unknown as Json,
       model_id: input.prediction.model.id,
     })
     .select()
@@ -169,6 +151,7 @@ export async function deleteAnalysis(analysis: Analysis): Promise<Result<null>> 
     analysis.heatmap_path,
     analysis.repaired_path,
     analysis.model3d_path,
+    analysis.model3d_before_path,
   ].filter((path): path is string => path !== null);
   await removeQuietly(supabase, paths);
   return { data: null, error: null };
@@ -191,14 +174,15 @@ export async function getSignedUrl(path: string): Promise<Result<string>> {
 }
 
 /** The pipeline outputs that can be attached to an analysis after the fact. */
-export type GeneratedArtifact = "repaired" | "model3d";
+export type GeneratedArtifact = "repaired" | "model3d_before" | "model3d_after";
 
 const ARTIFACT_SPEC: Record<
   GeneratedArtifact,
   { extension: string; contentType: string }
 > = {
   repaired: { extension: "_repaired.png", contentType: "image/png" },
-  model3d: { extension: ".glb", contentType: "model/gltf-binary" },
+  model3d_before: { extension: "_before.glb", contentType: "model/gltf-binary" },
+  model3d_after: { extension: "_after.glb", contentType: "model/gltf-binary" },
 };
 
 // Attaches a generated output to an existing analysis: uploads it and records
@@ -232,7 +216,7 @@ export async function attachArtifact(
       readCurrentPath: async () => {
         const { data: row, error } = await supabase
           .from("analyses")
-          .select("repaired_path, model3d_path")
+          .select("repaired_path, model3d_path, model3d_before_path")
           .eq("id", analysisId)
           .eq("user_id", userId)
           .maybeSingle();
@@ -241,7 +225,12 @@ export async function attachArtifact(
         }
         return {
           ok: true,
-          path: kind === "repaired" ? row.repaired_path : row.model3d_path,
+          path:
+            kind === "repaired"
+              ? row.repaired_path
+              : kind === "model3d_before"
+                ? row.model3d_before_path
+                : row.model3d_path,
         };
       },
       upload: async (uploadPath, uploadBlob, contentType) => {
@@ -253,9 +242,10 @@ export async function attachArtifact(
       updatePath: async (updatePath) => {
         // Named explicitly rather than via a computed key: a computed key widens the
         // patch to a string index signature and loses postgrest's column checking.
-        const patch =
-          kind === "repaired"
-            ? { repaired_path: updatePath }
+        const patch = kind === "repaired"
+          ? { repaired_path: updatePath }
+          : kind === "model3d_before"
+            ? { model3d_before_path: updatePath }
             : { model3d_path: updatePath };
         const { data, error } = await supabase
           .from("analyses")
@@ -302,23 +292,63 @@ async function removeQuietly(
 // API responses).
 function toAnalysis(row: AnalysesRow): Analysis | null {
   try {
-    return {
+    const base = {
       id: row.id,
       user_id: row.user_id,
       image_path: row.image_path,
       heatmap_path: row.heatmap_path,
-      tier: getTier(row.tier).code,
       confidence: row.confidence,
-      probabilities: toTierProbabilities(row.probabilities),
-      damage_percent: row.damage_percent,
       model_id: row.model_id,
       repaired_path: row.repaired_path,
       model3d_path: row.model3d_path,
+      model3d_before_path: row.model3d_before_path,
       created_at: row.created_at,
     };
+    if (row.scale_version === "phi3" && row.tier && row.damage_percent !== null) {
+      return {
+        ...base,
+        scale_version: "phi3",
+        tier: getTier(row.tier).code,
+        probabilities: toTierProbabilities(row.probabilities),
+        damage_percent: row.damage_percent,
+      };
+    }
+    if (row.scale_version === "raed4" && row.class_code) {
+      return {
+        ...base,
+        scale_version: "raed4",
+        class_code: getDamageClass(row.class_code).code,
+        scores: toDamageScores(row.scores),
+        detections: toDetections(row.detections),
+      };
+    }
+    return null;
   } catch {
     return null;
   }
+}
+
+function toDamageScores(value: unknown): DamageScores {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new TypeError("scores");
+  const raw = value as Record<string, unknown>;
+  const scores = {} as DamageScores;
+  for (const { code } of DAMAGE_CLASSES) {
+    if (typeof raw[code] !== "number") throw new TypeError(`scores.${code}`);
+    scores[code] = raw[code];
+  }
+  return scores;
+}
+
+function toDetections(value: unknown): DamageDetection[] {
+  if (!Array.isArray(value) || value.length === 0) throw new TypeError("detections");
+  return value.map((item) => {
+    if (typeof item !== "object" || item === null) throw new TypeError("detection");
+    const raw = item as Record<string, unknown>;
+    const box = raw.box as Record<string, unknown> | null;
+    if (!box || typeof raw.class_code !== "string" || typeof raw.confidence !== "number") throw new TypeError("detection");
+    for (const key of ["x1", "y1", "x2", "y2"] as const) if (typeof box[key] !== "number") throw new TypeError("box");
+    return { class_code: getDamageClass(raw.class_code).code, confidence: raw.confidence, box: { x1: box.x1 as number, y1: box.y1 as number, x2: box.x2 as number, y2: box.y2 as number } };
+  });
 }
 
 // Narrows an untyped jsonb column into TierProbabilities. Built by iterating
@@ -341,11 +371,3 @@ function toTierProbabilities(value: unknown): TierProbabilities {
 
 // The mock API ships the heatmap as raw base64 (no data: prefix); storage
 // wants bytes, so decode via atob into a typed PNG blob.
-function base64ToBlob(base64: string, type: string): Blob {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new Blob([bytes], { type });
-}

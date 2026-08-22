@@ -4,6 +4,8 @@
 import { useFormatter, useTranslations } from "next-intl";
 import { CornerTicks } from "@/components/ui/CornerTicks";
 import { TierStrip } from "@/components/ui/TierStrip";
+import { DamageStrip } from "@/components/ui/DamageStrip";
+import { getDamageClass } from "@/lib/damage-classes";
 import { getTier } from "@/lib/tiers";
 import type { Analysis } from "@/lib/types";
 
@@ -17,8 +19,11 @@ export interface AnalysisCardProps {
 export function AnalysisCard({ analysis, imageUrl, onOpen }: AnalysisCardProps) {
   const t = useTranslations();
   const format = useFormatter();
-  const tier = getTier(analysis.tier);
-  const tierName = t(`tiers.${tier.key}.name`);
+  const legacy = analysis.scale_version === "phi3";
+  const entry = legacy ? getTier(analysis.tier) : getDamageClass(analysis.class_code);
+  const name = legacy
+    ? t(`tiers.${entry.key}.name`)
+    : t(`damageClasses.${entry.key}.name`);
 
   return (
     // A real <button> so the whole card is keyboard-operable for free; inner
@@ -34,20 +39,24 @@ export function AnalysisCard({ analysis, imageUrl, onOpen }: AnalysisCardProps) 
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={imageUrl}
-          alt={tierName}
+          alt={name}
           className="block aspect-[4/3] w-full rounded object-cover"
         />
       ) : (
         // Signing failed for this item only: keep the card usable with a
         // quiet mono tier placeholder instead of a broken image.
         <span className="flex aspect-[4/3] w-full items-center justify-center rounded bg-bg font-mono text-4xl text-muted">
-          {tier.code}
+          {entry.code}
         </span>
       )}
-      <TierStrip size="md" activeTier={tier.code} className="mt-4" />
+      {legacy ? (
+        <TierStrip size="md" activeTier={analysis.tier} className="mt-4" />
+      ) : (
+        <DamageStrip active={analysis.class_code} className="mt-4" />
+      )}
       {/* Which services this assessment actually has stored, so the grid shows
           at a glance where the full pipeline was run. */}
-      {analysis.repaired_path !== null || analysis.model3d_path !== null ? (
+      {analysis.repaired_path !== null || analysis.model3d_path !== null || analysis.model3d_before_path !== null ? (
         <span className="mt-3 flex flex-wrap gap-1.5">
           {analysis.repaired_path !== null ? (
             <span className="border border-line px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted">
@@ -62,7 +71,8 @@ export function AnalysisCard({ analysis, imageUrl, onOpen }: AnalysisCardProps) 
         </span>
       ) : null}
       <span className="mt-3 block font-display text-sm font-bold uppercase tracking-wider">
-        {tierName}
+        {name}
+        {legacy ? <span className="ms-2 font-mono text-[10px] text-muted">{t("history.legacy")}</span> : null}
       </span>
       <span className="mt-2 flex items-baseline justify-between gap-3 font-mono text-xs text-muted">
         <span>
