@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import io
 import struct
+import urllib.error
+import urllib.request
 from typing import Any
 
 import pytest
@@ -89,6 +91,27 @@ def test_download_glb_streams_and_returns_valid_bytes(
     assert model3d._download_glb("https://models.example/result.glb") == expected
     assert response.read_calls
     assert all(0 < size <= 64 * 1024 for size in response.read_calls)
+
+
+def test_download_glb_uses_browser_user_agent_required_by_tripo_cdn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tripo's result CDN returns error 1010 to Python's default user agent."""
+    expected = valid_glb()
+
+    def open_like_tripo_cdn(
+        request: urllib.request.Request | str, **_kwargs: object
+    ) -> DownloadResponse:
+        if not isinstance(request, urllib.request.Request):
+            raise urllib.error.HTTPError(str(request), 403, "blocked", {}, None)
+        user_agent = request.get_header("User-agent")
+        if user_agent is None or not user_agent.startswith("Mozilla/5.0"):
+            raise urllib.error.HTTPError(request.full_url, 403, "blocked", {}, None)
+        return DownloadResponse(expected, content_length=len(expected))
+
+    monkeypatch.setattr(model3d.urllib.request, "urlopen", open_like_tripo_cdn)
+
+    assert model3d._download_glb("https://models.example/result.glb") == expected
 
 
 @pytest.mark.parametrize("with_bin", (False, True), ids=("json-only", "json-then-bin"))

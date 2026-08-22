@@ -28,6 +28,7 @@ _POLL_SECONDS = 3
 _MAX_POLL_SECONDS = 300
 _MAX_GLB_BYTES = 32 * 1024 * 1024
 _DOWNLOAD_CHUNK_BYTES = 64 * 1024
+_DOWNLOAD_USER_AGENT = "Mozilla/5.0 (compatible; DamageScale/1.0)"
 _GLB_MIN_BYTES = 24
 _GLB_JSON_CHUNK = 0x4E4F534A
 _GLB_BIN_CHUNK = 0x004E4942
@@ -88,7 +89,11 @@ def _is_valid_glb(glb: bytes) -> bool:
 
 def _download_glb(url: str) -> bytes:
     """Stream one bounded Tripo result and require a complete GLB v2 container."""
-    with urllib.request.urlopen(url, timeout=300) as response:
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": _DOWNLOAD_USER_AGENT},
+    )
+    with urllib.request.urlopen(request, timeout=300) as response:
         declared_length = response.headers.get("content-length")
         if declared_length is not None:
             try:
