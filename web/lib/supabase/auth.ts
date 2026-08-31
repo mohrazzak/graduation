@@ -6,6 +6,9 @@ import {
   isAuthRetryableFetchError,
 } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "./client";
+import { isSupabaseConfigured } from "./config.mts";
+
+export { isSupabaseConfigured };
 
 export type AuthErrorCode =
   | "invalid_credentials"
@@ -24,21 +27,6 @@ export interface AuthResult {
 export interface SignUpResult extends AuthResult {
   /** Email confirmation is ON and no session exists yet — show a notice, don't navigate. */
   confirmationRequired?: boolean;
-}
-
-// True only when env points at a real https Supabase project — lets the auth
-// forms fail fast with "not_configured" before the user provisions Supabase.
-export function isSupabaseConfigured(): boolean {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key || url.includes("placeholder") || key.includes("placeholder")) {
-    return false;
-  }
-  try {
-    return new URL(url).protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 function mapAuthError(error: unknown): AuthErrorCode {
