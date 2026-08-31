@@ -1,9 +1,9 @@
 "use client";
-// Demo-day samples: one thumbnail per tier, so the strip demonstrates the
-// actual scale the model predicts over.
+// Demo-day samples: one thumbnail per ACTIVE damage class, so the strip
+// demonstrates the exact four-class scale the Trained Model predicts over.
 import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { DAMAGE_TIERS, type TierCode } from "@/lib/tiers";
+import { DAMAGE_CLASSES, type DamageCode } from "@/lib/damage-classes";
 
 export interface SampleStripProps {
   onSample: (file: File) => void;
@@ -16,7 +16,7 @@ const THUMB_HEIGHT = 72;
 export function SampleStrip({ onSample, disabled = false }: SampleStripProps) {
   const t = useTranslations();
 
-  async function pick(code: TierCode): Promise<void> {
+  async function pick(code: DamageCode): Promise<void> {
     const name = `sample-${code}.jpg`;
     try {
       // Fetch the bytes and hand them over as a regular File so the sample
@@ -35,24 +35,25 @@ export function SampleStrip({ onSample, disabled = false }: SampleStripProps) {
         {t("analyze.samplesTitle")}
       </h2>
       <p className="mt-1 text-xs text-muted">{t("analyze.samplesHint")}</p>
-      <ul className="mt-3 grid grid-cols-3 gap-2">
-        {DAMAGE_TIERS.map((tier) => (
-          <li key={tier.code}>
+      <ul className="mt-3 grid grid-cols-4 gap-2">
+        {DAMAGE_CLASSES.map((damageClass) => (
+          <li key={damageClass.code}>
             <button
               type="button"
               disabled={disabled}
-              onClick={() => void pick(tier.code)}
+              onClick={() => void pick(damageClass.code)}
               className="block w-full rounded border border-line transition-colors duration-150 hover:border-hazard disabled:pointer-events-none disabled:opacity-40"
             >
               <Image
-                src={`/samples/sample-${tier.code}.jpg`}
-                alt={t(`tiers.${tier.key}.name`)}
+                src={`/samples/sample-${damageClass.code}.jpg`}
+                alt={t(`damageClasses.${damageClass.key}.name`)}
                 width={THUMB_WIDTH}
                 height={THUMB_HEIGHT}
-                className="block h-auto w-full"
+                // Sources differ slightly in aspect; cover keeps the row even.
+                className="block aspect-4/3 w-full object-cover"
               />
               <span className="block py-1 text-center font-mono text-[10px] text-muted">
-                {tier.code}
+                {damageClass.code}
               </span>
             </button>
           </li>

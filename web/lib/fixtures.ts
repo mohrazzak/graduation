@@ -16,10 +16,12 @@ interface Fixture {
   readonly sourceFile: string;
 }
 
+// Only the two samples an actual Tripo run covers appear here. SMD and HVD
+// have no pre-generated model, so they show the honest "out of credit" state
+// rather than a stand-in of some other building.
 const MODEL_3D_FIXTURES: readonly Fixture[] = [
-  { src: "/fixtures/sample-NC.glb", sourceFile: "sample-NC.jpg" },
-  { src: "/fixtures/sample-PC.glb", sourceFile: "sample-PC.jpg" },
-  { src: "/fixtures/sample-GC.glb", sourceFile: "sample-GC.jpg" },
+  { src: "/fixtures/sample-ND.glb", sourceFile: "sample-ND.jpg" },
+  { src: "/fixtures/sample-TD.glb", sourceFile: "sample-TD.jpg" },
 ] as const;
 
 /**

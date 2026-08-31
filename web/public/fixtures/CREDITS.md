@@ -12,9 +12,15 @@ Regenerate with: `python3 scripts/make_fixtures.py [--force]`
 
 | File | Source | Size | Geometry |
 | ---- | ------ | ---- | -------- |
-| `sample-NC.glb` | `public/samples/sample-NC.jpg` | 9.36 MB | 158,133 verts |
-| `sample-PC.glb` | `public/samples/sample-PC.jpg` | 15.69 MB | 276,982 verts |
-| `sample-GC.glb` | `public/samples/sample-GC.jpg` | 16.45 MB | 299,741 verts |
+| `sample-ND.glb` | `public/samples/sample-ND.jpg` | 9.36 MB | 158,133 verts |
+| `sample-TD.glb` | `public/samples/sample-TD.jpg` | 16.45 MB | 299,741 verts |
+
+Renamed from `sample-NC.glb` / `sample-GC.glb` when the sample strip moved to
+the four-class scale. The source images are byte-identical, so each model still
+depicts exactly the photo it is offered for. The former `sample-PC.glb` was
+dropped: under the active detector its source image returns `no_detection`, so
+the 3D step is unreachable from it. The SMD and HVD samples have no
+pre-generated model — they show the honest out-of-credit state instead.
 
 ## 2D restoration — MISSING
 
