@@ -9,12 +9,18 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root/api"
 
+# .env is shared with docker compose, which must stay on the mock, so the
+# caller's roster is captured BEFORE sourcing and reapplied after.
+caller_models="${ENABLED_MODELS:-}"
+
 if [[ -f "$repo_root/.env" ]]; then
   set -a
   # shellcheck disable=SC1091
   source "$repo_root/.env"
   set +a
 fi
+
+export ENABLED_MODELS="${caller_models:-raed}"
 
 # The CUDA-enabled training venv doubles as the isolated repair worker; the API
 # venv is deliberately CPU-only (see CLAUDE.md on the segfault-safe torch pin).
