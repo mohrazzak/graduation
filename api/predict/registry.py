@@ -51,7 +51,7 @@ REASON_LOAD_FAILED = "load_failed"
 _DISPLAY_NAMES = {
     "resnet50-phinet": "ResNet50 (PHI-Net)",
     "yolo-cls": "YOLO11-cls",
-    "raed": "YOLOv8s Building Damage Detector",
+    "raed": "Trained Model",
     "mock": "Mock",
 }
 

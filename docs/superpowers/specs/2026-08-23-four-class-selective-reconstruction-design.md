@@ -33,7 +33,7 @@
 
 ### 3.1 Model identity
 
-The public model id remains `raed` so saved references and routing stay stable. Its display name becomes **YOLOv8s Building Damage Detector**. `RAED_WEIGHTS_PATH` points to the verified `best.pt` checkpoint. The active roster defaults to `raed`; the old ResNet50 and YOLO11 classifiers remain in source for provenance but are not exposed by the four-class website.
+The public model id remains `raed` so saved references and routing stay stable. Its display name becomes **Trained Model**. `RAED_WEIGHTS_PATH` points to the verified `best.pt` checkpoint. The active roster defaults to `raed`; the old ResNet50 and YOLO11 classifiers remain in source for provenance but are not exposed by the four-class website.
 
 ### 3.2 Detector adapter
 
@@ -66,7 +66,7 @@ If no box passes the threshold, `/predict` returns HTTP `422` with detail key `n
       "box": {"x1": 0.1, "y1": 0.2, "x2": 0.6, "y2": 0.8}
     }
   ],
-  "model": {"id": "raed", "name": "YOLOv8s Building Damage Detector", "accuracy": null}
+  "model": {"id": "raed", "name": "Trained Model", "accuracy": null}
 }
 ```
 

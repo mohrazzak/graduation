@@ -32,8 +32,10 @@ def _load_yolo(path: str) -> Any:
 class RaedClassifier:
     """Detect image regions and summarize them conservatively by severity."""
 
+    # The id is persisted in Supabase rows and used for routing — it stays "raed".
+    # Only the human-facing label changed.
     id = "raed"
-    name = "YOLOv8s Building Damage Detector"
+    name = "Trained Model"
     accuracy: float | None = None
 
     def __init__(

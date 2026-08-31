@@ -68,7 +68,7 @@ def test_unavailable_models_are_listed_with_a_reason(monkeypatch):
     raed = next(m for m in list_models() if m.id == "raed")
     assert raed.available is False
     assert raed.reason == "weights_missing"
-    assert raed.name == "YOLOv8s Building Damage Detector"
+    assert raed.name == "Trained Model"
 
 
 def test_selecting_an_unavailable_model_raises(monkeypatch):

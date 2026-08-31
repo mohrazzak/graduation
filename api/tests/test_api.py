@@ -30,9 +30,7 @@ def _png_bytes(color: tuple[int, int, int], size: tuple[int, int] = (32, 32)) ->
     return buffer.getvalue()
 
 
-def _post_image(
-    client: TestClient, data: bytes, content_type: str = "image/png"
-) -> Response:
+def _post_image(client: TestClient, data: bytes, content_type: str = "image/png") -> Response:
     """POST raw bytes to /predict under the multipart field name 'file'."""
     return client.post("/predict", files={"file": ("photo.png", data, content_type)})
 
@@ -84,9 +82,7 @@ def test_distinct_images_yield_multiple_classes(client: TestClient) -> None:
     """Different images must spread across classes (guards a constant mock)."""
     classes = set()
     for shade in range(12):
-        response = _post_image(
-            client, _png_bytes((shade * 20, 255 - shade * 20, shade * 7))
-        )
+        response = _post_image(client, _png_bytes((shade * 20, 255 - shade * 20, shade * 7)))
         assert response.status_code == 200
         classes.add(response.json()["class_code"])
     assert len(classes) >= 2
@@ -100,7 +96,7 @@ def test_no_detection_is_explicit_not_no_damage(
 
     class EmptyDetector:
         id = "raed"
-        name = "YOLOv8s Building Damage Detector"
+        name = "Trained Model"
         accuracy = None
 
         def classify(self, image_bytes: bytes):  # noqa: ANN202 - always raises
@@ -168,9 +164,7 @@ def test_rejects_mislabeled_non_image(client: TestClient) -> None:
 
 def test_missing_file_field_returns_400(client: TestClient) -> None:
     """Omitting the 'file' field is a 400 {"detail": ...}, not FastAPI's 422."""
-    response = client.post(
-        "/predict", files={"other": ("photo.png", b"123", "image/png")}
-    )
+    response = client.post("/predict", files={"other": ("photo.png", b"123", "image/png")})
     assert response.status_code == 400
     assert "detail" in response.json()
 

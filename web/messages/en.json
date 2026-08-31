@@ -31,7 +31,7 @@
   },
   "landing": {
     "heroTitle": "HOW BADLY IS IT DAMAGED?",
-    "heroSub": "Raed's detector assesses four destruction levels and locates each damaged building.",
+    "heroSub": "The trained model assesses four destruction levels and locates each damaged building.",
     "ctaTry": "Try the demo",
     "howTitle": "How assessment works",
     "steps": {
@@ -192,7 +192,7 @@
     "title": "How it works",
     "scale": {
       "title": "The four destruction classes",
-      "intro": "Raed's detector locates buildings and reports the most severe observed class: no damage, slight/moderate, heavy/very heavy, or total damage.",
+      "intro": "The trained model locates buildings and reports the most severe observed class: no damage, slight/moderate, heavy/very heavy, or total damage.",
       "details": {
         "nonCollapse": "The structural system is intact. Damage, where present, is confined to finishes: surface cracking, spalled render, broken glazing. Load paths are continuous. Note that this class covers minor damage as well as none.",
         "partialCollapse": "One or more structural elements have failed — a floor slab, a bay, a section of load-bearing wall — while the remaining frame still carries load. Progressive collapse is the governing risk.",

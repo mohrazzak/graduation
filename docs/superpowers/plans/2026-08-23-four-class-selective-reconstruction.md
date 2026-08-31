@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Active damage codes are exactly `ND`, `SMD`, `HVD`, `TD` in severity order.
-- Raed's public model id remains `raed`; display name is `YOLOv8s Building Damage Detector`.
+- Raed's public model id remains `raed`; display name is `Trained Model`.
 - Default confidence threshold is `0.25`; no retained boxes returns `no_detection`, never `ND`.
 - Detector scores are maximum observed confidences, never normalized probabilities.
 - Legacy `NC` / `PC` / `GC` rows are preserved as `phi3`; new rows are `raed4`.
