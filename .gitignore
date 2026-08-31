@@ -20,3 +20,21 @@ __pycache__/
 # OS / editor
 .DS_Store
 *.swp
+# Claude Code session-recovery runtime state
+HANDOFF.md
+.claude/settings.local.json
+.claude/rate-limit-state.json
+.claude/stop-failure-events.jsonl
+.claude/quota-blocked.json
+
+# Model weights — never in the repo. The serving checkpoint lives outside it
+# (RAED_WEIGHTS_PATH); `best.pt (1)` is the rejected epoch-2 segment run.
+*.pt
+best.pt*
+
+# Untracked reference clone. Contains a hardcoded API credential in
+# ai/generate_3d_fast.py — must never be committed.
+A-Smart-Site-For-Rehabilitating-Damaged-Buildings/
+
+# Local Claude session-recovery config
+session-recover.yaml
