@@ -260,6 +260,53 @@ def _safe_image(result: object) -> Image.Image:
     return image
 
 
+def encode_long_prompt(pipeline: Any, prompt: str, negative_prompt: str) -> Any:
+    """Encode a prompt longer than CLIP's 77-token window, or None if it fits.
+
+    Diffusers truncates at `tokenizer.model_max_length` and drops the remainder
+    SILENTLY — a detailed restoration instruction lost most of its content that
+    way, including the part that said what to actually rebuild. Split each side
+    into windows, give every window its own BOS/EOS, and concatenate along the
+    sequence axis.
+
+    Both sides must yield the SAME number of windows: classifier-free guidance
+    pairs the two embeddings, and mismatched sequence lengths cannot be paired.
+    """
+    import torch
+
+    tokenizer = pipeline.tokenizer
+    text_encoder = pipeline.text_encoder
+    window = int(tokenizer.model_max_length)
+    body = window - 2  # leave room for this window's own BOS/EOS
+
+    def ids_of(text: str) -> list[int]:
+        return list(tokenizer(text, truncation=False, add_special_tokens=False).input_ids)
+
+    positive_ids, negative_ids = ids_of(prompt), ids_of(negative_prompt)
+    if len(positive_ids) <= body and len(negative_ids) <= body:
+        return None  # fits the stock path; leave it alone
+
+    windows = max(
+        -(-len(positive_ids) // body), -(-len(negative_ids) // body), 1
+    )
+    device = getattr(pipeline, "_execution_device", None) or text_encoder.device
+    bos, eos = tokenizer.bos_token_id, tokenizer.eos_token_id
+
+    def embed(ids: list[int]) -> Any:
+        padded = ids[: windows * body]
+        padded += [eos] * (windows * body - len(padded))
+        parts = [
+            text_encoder(
+                torch.tensor([[bos, *padded[i * body : (i + 1) * body], eos]], device=device)
+            )[0]
+            for i in range(windows)
+        ]
+        return torch.cat(parts, dim=1)
+
+    with torch.no_grad():
+        return embed(positive_ids), embed(negative_ids)
+
+
 def run_request(request_path: Path, *, loader: PipelineLoader | None = None) -> Path:
     """Validate one request, generate once, and save one composited PNG."""
     try:
@@ -301,9 +348,20 @@ def run_request(request_path: Path, *, loader: PipelineLoader | None = None) -> 
                 pipeline.enable_sequential_cpu_offload()
             else:
                 pipeline.enable_model_cpu_offload()
+            # Long prompts are opt-in per request: only a prompt that would be
+            # truncated takes the chunked path, and any failure inside it falls
+            # back to the stock call rather than losing the run.
+            try:
+                embeds = encode_long_prompt(pipeline, request.prompt, _NEGATIVE_PROMPT)
+            except Exception:  # noqa: BLE001 - never fail a run over prompt length
+                embeds = None
+            text_kwargs: dict[str, Any] = (
+                {"prompt": request.prompt, "negative_prompt": _NEGATIVE_PROMPT}
+                if embeds is None
+                else {"prompt_embeds": embeds[0], "negative_prompt_embeds": embeds[1]}
+            )
             result = pipeline(
-                prompt=request.prompt,
-                negative_prompt=_NEGATIVE_PROMPT,
+                **text_kwargs,
                 image=init_image,
                 mask_image=inpaint_mask,
                 control_image=control_image,

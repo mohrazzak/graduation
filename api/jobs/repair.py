@@ -51,8 +51,45 @@ _CLASS_GUIDANCE: dict[DamageCode, str] = {
 }
 
 
+# Reconstruction prompt for the classes where rebuilding is meaningful.
+#
+# ND has nothing to rebuild and TD has nothing intact left to rebuild FROM, so
+# both keep the instruction-style text above. The middle two get this instead:
+# it is descriptive rather than imperative, which is what a diffusion model's
+# text encoder actually responds to, and it names the symmetry-and-cloning
+# strategy that gives the model a concrete source for the missing facade.
+#
+# It exceeds CLIP's 77-token window on purpose — repair/controlnet_worker.py
+# encodes long prompts in chunks so none of it is silently dropped.
+_RECONSTRUCTION_PROMPT = (
+    "A hyper-realistic, 8k architectural photograph capturing the complete, "
+    "symmetrically restored modern concrete building facade based on image_0.png. "
+    "The original building is shown with its straight, flat, horizontal roof and "
+    "its fully intact uniform grid of windows. Using a technique of surgical "
+    "architectural cloning and symmetry-based in-painting, the existing damaged or "
+    "missing right-side facade panel is entirely repaired. The precise concrete "
+    "texture and specific window grid pattern of the healthy left side of the "
+    "building are meticulously copied, mirrored, and cloned to perfectly "
+    "reconstruct the right side. The result is a seamless, symmetrical, and fully "
+    "complete building facade where the newly reconstructed right side is an exact "
+    "duplicate of the pristine left side, including identical windows and concrete "
+    "work. The ground level, with its entrance and parking, is maintained, but now "
+    "leads into a perfectly restored whole structure. Natural daylight under a "
+    "clear blue sky makes the entirely complete, geometrically accurate facade "
+    "details crisp and clear, with no random noise."
+)
+
+_CLASS_PROMPT: dict[DamageCode, str] = {
+    "SMD": _RECONSTRUCTION_PROMPT,
+    "HVD": _RECONSTRUCTION_PROMPT,
+}
+
+
 def build_prompt(class_code: DamageCode) -> str:
-    """Compose the four-class restoration instruction."""
+    """Return the restoration instruction for one detector class."""
+    override = _CLASS_PROMPT.get(class_code)
+    if override is not None:
+        return override
     return f"{_BASE_INSTRUCTION} {_CLASS_GUIDANCE[class_code]}".strip()
 
 
