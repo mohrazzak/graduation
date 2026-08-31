@@ -21,6 +21,7 @@ import { getDamageClass } from "@/lib/damage-classes";
 import { getTier, isAlertTier } from "@/lib/tiers";
 import type { Analysis } from "@/lib/types";
 import { ModalShell } from "./ModalShell";
+import { useModelName } from "@/lib/model-names";
 
 export interface AnalysisModalProps {
   analysis: Analysis;
@@ -68,6 +69,8 @@ export function AnalysisModal({
   onClose,
 }: AnalysisModalProps) {
   const t = useTranslations();
+  const modelName = useModelName();
+  const modelLabel = modelName(analysis.model_id);
   const format = useFormatter();
   const [heatmapVisible, setHeatmapVisible] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -166,7 +169,7 @@ export function AnalysisModal({
         {legacy ? <DamageGauge value={analysis.damage_percent} tier={analysis.tier} /> : null}
         <p className="flex items-baseline gap-2 text-xs text-muted">
           <span className="uppercase tracking-wider">{t("analyze.modelUsed")}</span>
-          <span className="font-mono">{analysis.model_id}</span>
+          <span className="font-mono">{modelLabel}</span>
         </p>
       </div>
       {!legacy ? <div className="mt-5"><RecommendationCard classCode={analysis.class_code} /></div> : null}
@@ -273,7 +276,7 @@ export function AnalysisModal({
         confidence={analysis.confidence}
         probabilities={analysis.probabilities}
         damagePercent={analysis.damage_percent}
-        modelName={analysis.model_id}
+        modelName={modelLabel}
         reportId={analysis.id.slice(0, 8).toUpperCase()}
         createdAt={new Date(analysis.created_at)}
       /> : null}

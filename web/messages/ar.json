@@ -291,7 +291,13 @@
     "unavailable": "غير متاح",
     "weights_missing": "الأوزان غير مثبّتة",
     "dependency_missing": "اعتمادية مفقودة",
-    "load_failed": "تعذّر التحميل"
+    "load_failed": "تعذّر التحميل",
+    "names": {
+      "raed": "النموذج المدرَّب",
+      "mock": "نموذج تجريبي",
+      "resnet50-phinet": "ResNet50 (PHI-Net)",
+      "yolo-cls": "YOLO11-cls"
+    }
   },
   "services": {
     "title": "الخطوات التالية",

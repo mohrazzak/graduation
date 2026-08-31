@@ -3,6 +3,7 @@
 // but disabled with a translated reason — a disabled entry is information, a
 // missing one is a mystery.
 import { useFormatter, useTranslations } from "next-intl";
+import { useModelName } from "@/lib/model-names";
 import { useId } from "react";
 import type { ModelInfo } from "@/lib/types";
 
@@ -15,6 +16,7 @@ export interface ModelPickerProps {
 
 export function ModelPicker({ models, value, onChange, disabled = false }: ModelPickerProps) {
   const t = useTranslations();
+  const modelName = useModelName();
   const format = useFormatter();
   const selectId = useId();
 
@@ -32,7 +34,8 @@ export function ModelPicker({ models, value, onChange, disabled = false }: Model
           });
     const reason = model.available ? null : t(`models.${model.reason ?? "unavailable"}`);
     const suffix = [accuracy, reason].filter((part) => part !== null).join(" · ");
-    return suffix ? `${model.name} — ${suffix}` : model.name;
+    const name = modelName(model.id, model.name);
+    return suffix ? `${name} — ${suffix}` : name;
   }
 
   // One option is not a choice: render it as a static label rather than a

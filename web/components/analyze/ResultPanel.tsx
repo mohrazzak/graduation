@@ -4,6 +4,7 @@
 // hazard banner.
 import { type ReactNode } from "react";
 import { useFormatter, useTranslations } from "next-intl";
+import { useModelName } from "@/lib/model-names";
 import { DamageStrip } from "@/components/ui/DamageStrip";
 import { CornerTicks } from "@/components/ui/CornerTicks";
 import { getDamageClass, severityOf } from "@/lib/damage-classes";
@@ -18,6 +19,7 @@ export interface ResultPanelProps {
 
 export function ResultPanel({ prediction, children }: ResultPanelProps) {
   const t = useTranslations();
+  const modelName = useModelName();
   const format = useFormatter();
   const entry = getDamageClass(prediction.class_code);
   const alert = prediction.class_code === "TD";
@@ -73,7 +75,9 @@ export function ResultPanel({ prediction, children }: ResultPanelProps) {
         </div>
         <p className="mt-5 flex flex-wrap items-baseline gap-2 border-t border-line pt-4 text-xs text-muted">
           <span className="uppercase tracking-wider">{t("analyze.modelUsed")}</span>
-          <span className="font-mono">{prediction.model.name}</span>
+          <span className="font-mono">
+            {modelName(prediction.model.id, prediction.model.name)}
+          </span>
           {prediction.model.accuracy !== null ? (
             <span className="font-mono">
               {t("models.accuracy", {

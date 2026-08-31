@@ -291,7 +291,13 @@
     "unavailable": "Unavailable",
     "weights_missing": "Weights not installed",
     "dependency_missing": "Dependency missing",
-    "load_failed": "Failed to load"
+    "load_failed": "Failed to load",
+    "names": {
+      "raed": "Trained Model",
+      "mock": "Mock",
+      "resnet50-phinet": "ResNet50 (PHI-Net)",
+      "yolo-cls": "YOLO11-cls"
+    }
   },
   "services": {
     "title": "Next steps",
