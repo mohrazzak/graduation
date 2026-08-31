@@ -54,12 +54,13 @@ Docker API intentionally lacks the CUDA stack, so real local generation runs
 through the external repair venv described below. Mask and edge artifacts remain
 local and quota-free in every configuration.
 
-Still pending on the user: fill the footer university/supervisor names
-(`footer.university` / `footer.supervisor` in `web/messages/{en,ar}.json`, still
-literal placeholders), and fund or wait out the external API quotas if those
-providers are needed. The long-standing "disable Confirm email" item is DONE —
-the local stack auto-confirms, and registration was driven end-to-end in the
-browser.
+Nothing is pending on the user for the build itself. The two long-standing
+items are both DONE: "disable Confirm email" (the local stack auto-confirms, and
+registration was driven end-to-end in the browser) and the footer names, now
+Aleppo University / Dr. Fadel Sukkar in both locales. The only optional item
+left is funding Tripo if a LIVE 3D run is wanted on stage — the pre-generated
+GLB fixtures cover only the ND and TD samples, and 2D repair no longer needs a
+paid provider.
 
 Authoritative documents — read before changing anything:
 
