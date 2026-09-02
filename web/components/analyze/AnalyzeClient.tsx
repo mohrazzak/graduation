@@ -10,7 +10,6 @@ import { getDamageClass } from "@/lib/damage-classes";
 import type { Prediction } from "@/lib/types";
 import { AnalyzeError } from "./AnalyzeError";
 import { DropZone } from "./DropZone";
-import { VerdictOverlay } from "./VerdictOverlay";
 import { ImageWithHeatmap } from "./ImageWithHeatmap";
 import { ModelPicker } from "./ModelPicker";
 import { RecommendationCard } from "./RecommendationCard";
@@ -120,13 +119,6 @@ export function AnalyzeClient() {
             heatmapVisible={false}
           >
             {phase === "analyzing" ? <ScanOverlay /> : null}
-            {phase === "done" && prediction !== null ? (
-              <VerdictOverlay
-                detections={prediction.detections}
-                classCode={prediction.class_code}
-                confidence={prediction.confidence}
-              />
-            ) : null}
           </ImageWithHeatmap>
         ) : (
           <DropZone onFile={selectFile} />

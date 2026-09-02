@@ -52,52 +52,55 @@
     "levelsSub": "Every photo lands on one scale, from a standing structure to rubble.",
     "levelPhotoAlt": "Example building photo — {name}"
   },
-  "tiers": {
-    "nonCollapse": {
-      "name": "Non-collapse",
-      "description": "Intact or minor damage; the structure remains standing.",
+  "damageClasses": {
+    "noDamage": {
+      "name": "No Damage",
+      "description": "No visible structural damage was detected.",
       "recommendation": {
-        "title": "Cosmetic repairs",
+        "title": "Document and monitor",
         "items": [
-          "Structurally sound",
-          "Paint and cosmetic repairs",
-          "Periodic inspection every 6 months",
-          "Treat surface cracks"
+          "Keep this assessment for comparison",
+          "Inspect periodically",
+          "Use an engineer for any hidden concern"
         ]
       }
     },
-    "partialCollapse": {
-      "name": "Partial collapse",
-      "description": "Part of the structure has collapsed; the rest stands.",
+    "slightModerate": {
+      "name": "Slight / Moderate Damage",
+      "description": "Localized repairable damage was detected.",
       "recommendation": {
-        "title": "Immediate structural reinforcement",
+        "title": "Targeted repair",
         "items": [
-          "Carbon fiber reinforcement (CFRP)",
-          "Strengthen load-bearing columns",
-          "Temporary evacuation during repairs",
-          "Full inspection by a structural engineer"
+          "Restrict access near damaged areas",
+          "Arrange an engineering inspection",
+          "Repair the affected elements"
         ]
       }
     },
-    "globalCollapse": {
-      "name": "Global collapse",
-      "description": "Catastrophic damage; the building has collapsed.",
+    "heavyVeryHeavy": {
+      "name": "Heavy / Very Heavy Damage",
+      "description": "Major structural damage was detected.",
       "recommendation": {
-        "title": "Demolish and rebuild",
+        "title": "Urgent structural intervention",
         "items": [
-          "Building is not salvageable",
-          "Immediate evacuation required",
-          "Safe demolition under engineering supervision",
-          "Rebuild according to modern seismic code"
+          "Evacuate the affected area",
+          "Shore unstable elements",
+          "Commission a full structural assessment"
+        ]
+      }
+    },
+    "totalDamage": {
+      "name": "Total Damage",
+      "description": "Destruction is extensive or complete.",
+      "recommendation": {
+        "title": "Secure and rebuild",
+        "items": [
+          "Keep everyone outside the exclusion zone",
+          "Plan controlled clearance with engineers",
+          "Treat reconstruction as conceptual until surveyed"
         ]
       }
     }
-  },
-  "damageClasses": {
-    "noDamage": { "name": "No Damage", "description": "No visible structural damage was detected.", "recommendation": { "title": "Document and monitor", "items": ["Keep this assessment for comparison", "Inspect periodically", "Use an engineer for any hidden concern"] } },
-    "slightModerate": { "name": "Slight / Moderate Damage", "description": "Localized repairable damage was detected.", "recommendation": { "title": "Targeted repair", "items": ["Restrict access near damaged areas", "Arrange an engineering inspection", "Repair the affected elements"] } },
-    "heavyVeryHeavy": { "name": "Heavy / Very Heavy Damage", "description": "Major structural damage was detected.", "recommendation": { "title": "Urgent structural intervention", "items": ["Evacuate the affected area", "Shore unstable elements", "Commission a full structural assessment"] } },
-    "totalDamage": { "name": "Total Damage", "description": "Destruction is extensive or complete.", "recommendation": { "title": "Secure and rebuild", "items": ["Keep everyone outside the exclusion zone", "Plan controlled clearance with engineers", "Treat reconstruction as conceptual until surveyed"] } }
   },
   "analyze": {
     "title": "Analyze",
@@ -158,7 +161,6 @@
       "cta": "Run analysis"
     },
     "confidence": "Confidence",
-    "legacy": "Legacy PHI-3 scale",
     "deleteConfirm": "Delete this assessment? This cannot be undone.",
     "deleted": "Assessment deleted.",
     "viewDetails": "View details",
@@ -216,19 +218,16 @@
     },
     "metrics": {
       "title": "Evaluation metrics",
-      "intro": "Measured on the PHI-Net validation split — 146 images the models never saw during training.",
-      "accuracyLabel": "Overall accuracy",
-      "confusionTitle": "Confusion matrix",
-      "confusionCaption": "Measured 3×3 confusion matrix for {model}. Rows are actual classes, columns are predicted; cell shading is scaled to each row's support, so a strong diagonal reads as accuracy rather than class imbalance.",
-      "axisActual": "Actual",
-      "axisPredicted": "Predicted",
-      "perLevelTitle": "Per-class precision and recall — {model}",
-      "levelHeader": "Class",
-      "precision": "Precision",
-      "recall": "Recall",
-      "accuracyNote": "Validation top-1 accuracy on the same three-class split, so the figures are directly comparable.",
-      "support": "n={count}",
-      "perLevelNote": "Partial collapse is the hardest class for both models: it sits between the other two and is most often confused with them. Non-collapse is under-recalled because the class includes minor damage, which the models frequently read as partial collapse."
+      "intro": "Measured on the validation split held out from the detector's own 150-epoch training run, and read from the checkpoint that ships.",
+      "breakdownTitle": "Full breakdown",
+      "architecture": "{architecture}, {epochs} epochs, {imageSize}px images",
+      "names": {
+        "map50": "mAP@50",
+        "map5095": "mAP@50-95",
+        "precision": "Precision",
+        "recall": "Recall"
+      },
+      "detectionNote": "These are detection metrics, not classification accuracy. The model locates each damaged region and labels it, so it is scored by mean average precision — the overlap between predicted and true regions, averaged across IoU thresholds. A percentage here is not comparable to the top-1 accuracy of an image classifier: mAP is a stricter measure, because a prediction must be both correctly classified and correctly located to count."
     },
     "gradcam": {
       "title": "Explainability: where the model looked",
@@ -294,10 +293,7 @@
     "load_failed": "Failed to load",
     "names": {
       "raed": "Trained Model",
-      "raed-seg": "Segmentation Model",
-      "mock": "Mock",
-      "resnet50-phinet": "ResNet50 (PHI-Net)",
-      "yolo-cls": "YOLO11-cls"
+      "mock": "Mock"
     }
   },
   "services": {
@@ -371,8 +367,17 @@
     "title": "3D reconstruction",
     "intro": "Turn the photo into a textured 3D model you can orbit, inspect, and download.",
     "compareIntro": "Generate either model explicitly. Each run uses service credits and remains independent.",
-    "before": { "title": "Before rebuild", "description": "3D model from the original damaged photo.", "run": "Generate before model" },
-    "after": { "title": "After reconstruction", "description": "3D model from the restored 2D result.", "run": "Generate after model", "disabled": "Complete the selected 2D reconstruction first." },
+    "before": {
+      "title": "Before rebuild",
+      "description": "3D model from the original damaged photo.",
+      "run": "Generate before model"
+    },
+    "after": {
+      "title": "After reconstruction",
+      "description": "3D model from the restored 2D result.",
+      "run": "Generate after model",
+      "disabled": "Complete the selected 2D reconstruction first."
+    },
     "runOriginal": "Reconstruct from photo",
     "runRepaired": "Reconstruct from restored",
     "source": {

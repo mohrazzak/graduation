@@ -1,8 +1,8 @@
-// Landing: hero with the animated SCALE, the three-step process, and the three tiers.
+// Landing: hero with the animated SCALE, the three-step process, and the four classes.
 import { setRequestLocale } from "next-intl/server";
 import { Hero } from "@/components/landing/Hero";
 import { HowItWorksSection } from "@/components/landing/HowItWorksSection";
-import { TiersGrid } from "@/components/landing/TiersGrid";
+import { DamageClassGrid } from "@/components/landing/DamageClassGrid";
 
 interface LandingPageProps {
   params: Promise<{ locale: string }>;
@@ -17,7 +17,7 @@ export default async function LandingPage({ params }: LandingPageProps) {
     <>
       <Hero />
       <HowItWorksSection />
-      <TiersGrid />
+      <DamageClassGrid />
     </>
   );
 }

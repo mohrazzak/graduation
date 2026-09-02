@@ -1,5 +1,5 @@
-// Landing tiers section: all three collapse tiers as ticked cards, driven by
-// DAMAGE_TIERS.
+// Landing scale section: all four damage classes as ticked cards, driven by
+// DAMAGE_CLASSES.
 import { getLocale, getTranslations } from "next-intl/server";
 import Image from "next/image";
 import { Card } from "@/components/ui/Card";
@@ -7,9 +7,9 @@ import { DAMAGE_CLASSES } from "@/lib/damage-classes";
 
 const CLASS_IMAGE = { ND: "NC", SMD: "PC", HVD: "PC", TD: "GC" } as const;
 
-export async function TiersGrid() {
+export async function DamageClassGrid() {
   const locale = await getLocale();
-  // Each card shows the Arabic AND English tier name. The secondary name comes
+  // Each card shows the Arabic AND English class name. The secondary name comes
   // from the OTHER locale's catalog, loaded explicitly.
   const otherLocale = locale === "ar" ? "en" : "ar";
   const [t, tOther] = await Promise.all([

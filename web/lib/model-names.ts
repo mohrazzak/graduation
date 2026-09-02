@@ -8,8 +8,8 @@
 // from messages/*.json and the id itself is only ever a last resort.
 import { useTranslations } from "next-intl";
 
-/** Model ids a saved analysis row can reference, including retired backends. */
-export const KNOWN_MODEL_IDS = ["raed", "raed-seg", "mock", "resnet50-phinet", "yolo-cls"] as const;
+/** Model ids a saved analysis row can reference. */
+export const KNOWN_MODEL_IDS = ["raed", "mock"] as const;
 
 export type KnownModelId = (typeof KNOWN_MODEL_IDS)[number];
 

@@ -6,19 +6,14 @@ import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { BeforeAfter } from "@/components/analyze/BeforeAfter";
 import { ConfidenceBars } from "@/components/analyze/ConfidenceBars";
-import { VerdictOverlay } from "@/components/analyze/VerdictOverlay";
-import { DamageGauge } from "@/components/analyze/DamageGauge";
 import { ModelViewer } from "@/components/analyze/ModelViewer";
 import { RecommendationCard } from "@/components/analyze/RecommendationCard";
 import { HeatmapToggle } from "@/components/analyze/HeatmapToggle";
 import { ImageWithHeatmap } from "@/components/analyze/ImageWithHeatmap";
-import { ReportDocument } from "@/components/report/ReportDocument";
 import { Button } from "@/components/ui/Button";
 import type { SignedArtifact } from "@/lib/signedArtifact.mts";
-import { TierStrip } from "@/components/ui/TierStrip";
 import { DamageStrip } from "@/components/ui/DamageStrip";
 import { getDamageClass } from "@/lib/damage-classes";
-import { getTier, isAlertTier } from "@/lib/tiers";
 import type { Analysis } from "@/lib/types";
 import { ModalShell } from "./ModalShell";
 import { useModelName } from "@/lib/model-names";
@@ -76,10 +71,9 @@ export function AnalysisModal({
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
-  const legacy = analysis.scale_version === "phi3";
-  const entry = legacy ? getTier(analysis.tier) : getDamageClass(analysis.class_code);
-  const alert = legacy ? isAlertTier(analysis.tier) : analysis.class_code === "TD";
-  const name = legacy ? t(`tiers.${entry.key}.name`) : t(`damageClasses.${entry.key}.name`);
+  const entry = getDamageClass(analysis.class_code);
+  const alert = analysis.class_code === "TD";
+  const name = t(`damageClasses.${entry.key}.name`);
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -130,13 +124,6 @@ export function AnalysisModal({
           heatmapVisible={heatmapVisible}
           className="mt-4"
         >
-          {!legacy ? (
-            <VerdictOverlay
-              detections={analysis.detections}
-              classCode={analysis.class_code}
-              confidence={analysis.confidence}
-            />
-          ) : null}
         </ImageWithHeatmap>
       ) : (
         <div
@@ -146,11 +133,7 @@ export function AnalysisModal({
           {entry.code}
         </div>
       )}
-      {legacy ? (
-        <TierStrip size="md" activeTier={analysis.tier} className="mt-5" />
-      ) : (
-        <DamageStrip active={analysis.class_code} className="mt-5" />
-      )}
+      <DamageStrip active={analysis.class_code} className="mt-5" />
       <p className="mt-4 flex flex-wrap items-baseline justify-between gap-3">
         <span className="flex items-baseline gap-3">
           <span className="text-xs uppercase tracking-wider text-muted">
@@ -170,15 +153,18 @@ export function AnalysisModal({
           })}
         </time>
       </p>
-      {!legacy ? <div className="mt-4"><ConfidenceBars scores={analysis.scores} /></div> : null}
+      <div className="mt-4">
+        <ConfidenceBars scores={analysis.scores} />
+      </div>
       <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
-        {legacy ? <DamageGauge value={analysis.damage_percent} tier={analysis.tier} /> : null}
         <p className="flex items-baseline gap-2 text-xs text-muted">
           <span className="uppercase tracking-wider">{t("analyze.modelUsed")}</span>
           <span className="font-mono">{modelLabel}</span>
         </p>
       </div>
-      {!legacy ? <div className="mt-5"><RecommendationCard classCode={analysis.class_code} /></div> : null}
+      <div className="mt-5">
+        <RecommendationCard classCode={analysis.class_code} />
+      </div>
       {/* Generated outputs. Each appears only when that service actually ran,
           so an entry never implies work it does not have. */}
       {analysis.repaired_path !== null ? (
@@ -274,18 +260,6 @@ export function AnalysisModal({
           {t("history.deleteFailed")}
         </p>
       ) : null}
-      {/* Portals onto <body>; print-only (globals.css hides everything else). */}
-      {legacy ? <ReportDocument
-        imageSrc={imageUrl}
-        heatmapSrc={heatmapUrl}
-        tier={analysis.tier}
-        confidence={analysis.confidence}
-        probabilities={analysis.probabilities}
-        damagePercent={analysis.damage_percent}
-        modelName={modelLabel}
-        reportId={analysis.id.slice(0, 8).toUpperCase()}
-        createdAt={new Date(analysis.created_at)}
-      /> : null}
     </ModalShell>
   );
 }

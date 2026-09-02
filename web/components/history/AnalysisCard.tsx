@@ -1,12 +1,10 @@
 "use client";
-// One saved assessment in the history grid: thumbnail, mini scale, tier name,
+// One saved assessment in the history grid: thumbnail, mini scale, class name,
 // confidence + date in mono. The whole card is a button opening the detail modal.
 import { useFormatter, useTranslations } from "next-intl";
 import { CornerTicks } from "@/components/ui/CornerTicks";
-import { TierStrip } from "@/components/ui/TierStrip";
 import { DamageStrip } from "@/components/ui/DamageStrip";
 import { getDamageClass } from "@/lib/damage-classes";
-import { getTier } from "@/lib/tiers";
 import type { Analysis } from "@/lib/types";
 
 export interface AnalysisCardProps {
@@ -19,11 +17,8 @@ export interface AnalysisCardProps {
 export function AnalysisCard({ analysis, imageUrl, onOpen }: AnalysisCardProps) {
   const t = useTranslations();
   const format = useFormatter();
-  const legacy = analysis.scale_version === "phi3";
-  const entry = legacy ? getTier(analysis.tier) : getDamageClass(analysis.class_code);
-  const name = legacy
-    ? t(`tiers.${entry.key}.name`)
-    : t(`damageClasses.${entry.key}.name`);
+  const entry = getDamageClass(analysis.class_code);
+  const name = t(`damageClasses.${entry.key}.name`);
 
   return (
     // A real <button> so the whole card is keyboard-operable for free; inner
@@ -44,16 +39,12 @@ export function AnalysisCard({ analysis, imageUrl, onOpen }: AnalysisCardProps) 
         />
       ) : (
         // Signing failed for this item only: keep the card usable with a
-        // quiet mono tier placeholder instead of a broken image.
+        // quiet mono class placeholder instead of a broken image.
         <span className="flex aspect-[4/3] w-full items-center justify-center rounded bg-bg font-mono text-4xl text-muted">
           {entry.code}
         </span>
       )}
-      {legacy ? (
-        <TierStrip size="md" activeTier={analysis.tier} className="mt-4" />
-      ) : (
-        <DamageStrip active={analysis.class_code} className="mt-4" />
-      )}
+      <DamageStrip active={analysis.class_code} className="mt-4" />
       {/* Which services this assessment actually has stored, so the grid shows
           at a glance where the full pipeline was run. */}
       {analysis.repaired_path !== null || analysis.model3d_path !== null || analysis.model3d_before_path !== null ? (
@@ -72,7 +63,6 @@ export function AnalysisCard({ analysis, imageUrl, onOpen }: AnalysisCardProps) 
       ) : null}
       <span className="mt-3 block font-display text-sm font-bold uppercase tracking-wider">
         {name}
-        {legacy ? <span className="ms-2 font-mono text-[10px] text-muted">{t("history.legacy")}</span> : null}
       </span>
       <span className="mt-2 flex items-baseline justify-between gap-3 font-mono text-xs text-muted">
         <span>

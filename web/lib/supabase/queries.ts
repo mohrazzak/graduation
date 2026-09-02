@@ -1,9 +1,8 @@
 // The ONLY data-access layer for analyses + their stored images: storage
 // upload/remove/signed-url and analyses CRUD over the browser Supabase client.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DAMAGE_TIERS, getTier } from "../tiers";
 import { DAMAGE_CLASSES, getDamageClass } from "../damage-classes";
-import type { Analysis, DamageDetection, DamageScores, Prediction, TierProbabilities } from "../types";
+import type { Analysis, DamageDetection, DamageScores, Prediction } from "../types";
 import { isSupabaseConfigured } from "./auth";
 import { attachArtifactWithOperations } from "./artifactAttachment.mts";
 import { getSupabaseBrowserClient } from "./client";
@@ -304,15 +303,6 @@ function toAnalysis(row: AnalysesRow): Analysis | null {
       model3d_before_path: row.model3d_before_path,
       created_at: row.created_at,
     };
-    if (row.scale_version === "phi3" && row.tier && row.damage_percent !== null) {
-      return {
-        ...base,
-        scale_version: "phi3",
-        tier: getTier(row.tier).code,
-        probabilities: toTierProbabilities(row.probabilities),
-        damage_percent: row.damage_percent,
-      };
-    }
     if (row.scale_version === "raed4" && row.class_code) {
       return {
         ...base,
@@ -349,24 +339,6 @@ function toDetections(value: unknown): DamageDetection[] {
     for (const key of ["x1", "y1", "x2", "y2"] as const) if (typeof box[key] !== "number") throw new TypeError("box");
     return { class_code: getDamageClass(raw.class_code).code, confidence: raw.confidence, box: { x1: box.x1 as number, y1: box.y1 as number, x2: box.x2 as number, y2: box.y2 as number } };
   });
-}
-
-// Narrows an untyped jsonb column into TierProbabilities. Built by iterating
-// the scale so a row missing a tier is rejected rather than silently defaulted.
-function toTierProbabilities(value: unknown): TierProbabilities {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new TypeError("probabilities is not a tier-keyed object");
-  }
-  const entries = value as Record<string, unknown>;
-  const probabilities = {} as TierProbabilities;
-  for (const { code } of DAMAGE_TIERS) {
-    const probability = entries[code];
-    if (typeof probability !== "number" || !Number.isFinite(probability)) {
-      throw new TypeError(`probabilities.${code} is missing or not a number`);
-    }
-    probabilities[code] = probability;
-  }
-  return probabilities;
 }
 
 // The mock API ships the heatmap as raw base64 (no data: prefix); storage

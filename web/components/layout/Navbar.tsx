@@ -9,7 +9,7 @@ import { Link } from "@/i18n/navigation";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { LocaleSwitcher } from "@/components/layout/LocaleSwitcher";
 import { Button } from "@/components/ui/Button";
-import { TierStrip } from "@/components/ui/TierStrip";
+import { DamageStrip } from "@/components/ui/DamageStrip";
 import { getServerUser } from "@/lib/supabase/server";
 
 // user_metadata is an untyped bag — narrow before trusting display_name.
@@ -37,7 +37,7 @@ export async function Navbar() {
           aria-label={t("common.appName")}
           className="flex shrink-0 items-center gap-2.5"
         >
-          <TierStrip size="sm" />
+          <DamageStrip size="sm" />
           {/* Signed-in mobile bars carry two buttons; dropping the wordmark
               (the strip alone is the brand mark) keeps 390px from overflowing. */}
           <span

@@ -1,6 +1,5 @@
 // Shared data contracts: what the FastAPI /predict endpoint returns
 // (Prediction) and what an analyses row in Supabase looks like (Analysis).
-import type { TierCode } from "./tiers";
 import type { DamageCode } from "./damage-classes";
 
 export interface ModelInfo {
@@ -11,8 +10,6 @@ export interface ModelInfo {
   // Message key, not prose: weights_missing | dependency_missing | load_failed
   reason: string | null;
 }
-
-export type TierProbabilities = Record<TierCode, number>;
 
 export type DamageScores = Record<DamageCode, number>;
 
@@ -52,18 +49,10 @@ interface AnalysisBase {
   created_at: string; // ISO timestamp
 }
 
-export interface LegacyAnalysis extends AnalysisBase {
-  scale_version: "phi3";
-  tier: TierCode;
-  probabilities: TierProbabilities;
-  damage_percent: number;
-}
-
-export interface RaedAnalysis extends AnalysisBase {
+export interface Analysis extends AnalysisBase {
+  /** Only scale the product writes. Kept on the row so old data stays identifiable. */
   scale_version: "raed4";
   class_code: DamageCode;
   scores: DamageScores;
   detections: DamageDetection[];
 }
-
-export type Analysis = LegacyAnalysis | RaedAnalysis;
