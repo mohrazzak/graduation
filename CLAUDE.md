@@ -97,6 +97,16 @@ each class the maximum detector confidence is reported. Scores are detector
 confidences, not normalized probabilities. No retained boxes returns
 `no_detection`, never `ND`.
 
+⚠ **The UI shows ONE verdict per image, never a label per box.** Both active
+models are localization models (`raed` is task `detect`, `raed-seg` is task
+`segment`), so they emit a class per region — but the image-level class is a
+derived most-severe-wins summary, and a photo carrying three differently
+labelled boxes reads as three competing answers. `VerdictOverlay` therefore
+draws every box in the *verdict's* colour with no per-box text, plus a single
+badge. Do not restore per-detection labels: an examiner asking "why does one
+box say ND and the panel say TD?" is the exact confusion this removed. The
+per-detection classes are still returned by `/predict` and still persisted.
+
 ### Trained models
 
 | id | What | Val accuracy |

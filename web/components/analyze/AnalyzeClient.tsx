@@ -10,7 +10,7 @@ import { getDamageClass } from "@/lib/damage-classes";
 import type { Prediction } from "@/lib/types";
 import { AnalyzeError } from "./AnalyzeError";
 import { DropZone } from "./DropZone";
-import { DetectionOverlay } from "./DetectionOverlay";
+import { VerdictOverlay } from "./VerdictOverlay";
 import { ImageWithHeatmap } from "./ImageWithHeatmap";
 import { ModelPicker } from "./ModelPicker";
 import { RecommendationCard } from "./RecommendationCard";
@@ -121,7 +121,11 @@ export function AnalyzeClient() {
           >
             {phase === "analyzing" ? <ScanOverlay /> : null}
             {phase === "done" && prediction !== null ? (
-              <DetectionOverlay detections={prediction.detections} />
+              <VerdictOverlay
+                detections={prediction.detections}
+                classCode={prediction.class_code}
+                confidence={prediction.confidence}
+              />
             ) : null}
           </ImageWithHeatmap>
         ) : (

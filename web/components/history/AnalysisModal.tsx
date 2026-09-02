@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { BeforeAfter } from "@/components/analyze/BeforeAfter";
 import { ConfidenceBars } from "@/components/analyze/ConfidenceBars";
-import { DetectionOverlay } from "@/components/analyze/DetectionOverlay";
+import { VerdictOverlay } from "@/components/analyze/VerdictOverlay";
 import { DamageGauge } from "@/components/analyze/DamageGauge";
 import { ModelViewer } from "@/components/analyze/ModelViewer";
 import { RecommendationCard } from "@/components/analyze/RecommendationCard";
@@ -130,7 +130,13 @@ export function AnalysisModal({
           heatmapVisible={heatmapVisible}
           className="mt-4"
         >
-          {!legacy ? <DetectionOverlay detections={analysis.detections} /> : null}
+          {!legacy ? (
+            <VerdictOverlay
+              detections={analysis.detections}
+              classCode={analysis.class_code}
+              confidence={analysis.confidence}
+            />
+          ) : null}
         </ImageWithHeatmap>
       ) : (
         <div
