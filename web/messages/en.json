@@ -194,20 +194,15 @@
     "title": "How it works",
     "scale": {
       "title": "The four destruction classes",
-      "intro": "The trained model locates buildings and reports the most severe observed class: no damage, slight/moderate, heavy/very heavy, or total damage.",
-      "details": {
-        "nonCollapse": "The structural system is intact. Damage, where present, is confined to finishes: surface cracking, spalled render, broken glazing. Load paths are continuous. Note that this class covers minor damage as well as none.",
-        "partialCollapse": "One or more structural elements have failed — a floor slab, a bay, a section of load-bearing wall — while the remaining frame still carries load. Progressive collapse is the governing risk.",
-        "globalCollapse": "The primary structural system has failed. What remains reads as debris rather than frame. Assessment shifts from repair to demolition and site clearance."
-      }
+      "intro": "The trained model locates buildings and reports the most severe observed class: no damage, slight/moderate, heavy/very heavy, or total damage."
     },
     "dataset": {
       "title": "Dataset and labeling",
-      "placeholderTag": "PHI-Net Task 5 — Collapse Mode",
+      "placeholderTag": "Counts not measured here",
       "sourcesTitle": "Data sources",
-      "sourcesBody": "The imagery comes from PHI-Net, the post-hazard image dataset published by the Pacific Earthquake Engineering Research Center (PEER) at UC Berkeley. This project uses Task 5, Collapse Mode. The split used for training holds 1,226 training images — 322 non-collapse, 379 partial collapse, 525 global collapse — and 146 validation images (39 / 40 / 67). The classes are imbalanced toward global collapse, which is worth weighing when reading per-class results.",
+      "sourcesBody": "The detector was trained on a four-class annotated set of post-hazard building photographs, each image carrying bounding boxes rather than a single whole-image label. Training ran for 150 epochs at 800px. The labelled set is held by the model author and its per-class composition has not been measured on this machine, so no image counts are published here — an invented breakdown would be worse than none. The earlier PHI-Net Task 5 figures that stood here described the retired three-class classifiers, not this model.",
       "labelingTitle": "Labeling protocol",
-      "labelingBody": "Labels ship with PHI-Net rather than being annotated here, so the grading criteria are the dataset authors'. Their definition matters for reading results: non-collapse means intact OR minor damage with the structure still standing — not undamaged. Partial collapse means part of the structure failed while the rest stands; global collapse means the primary structural system failed."
+      "labelingBody": "Every building in an image is boxed and graded independently, which is why one photograph can contain regions of different severity. The four grades map onto this scale in order: no damage, slight/moderate, heavy/very heavy, total. Because each region is graded on its own, the whole-image verdict is not a label the model produces — it is the most severe region found, chosen deliberately so an assessment errs toward caution rather than reassurance."
     },
     "model": {
       "title": "Model architecture",
