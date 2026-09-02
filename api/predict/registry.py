@@ -1,46 +1,23 @@
 """The classifier roster: which backends exist, which load, which are shown.
 
-⚠ IMPORT ORDER IS LOAD-BEARING — read before touching the imports below.
-
-This registry offers a Keras (TensorFlow) backend and an Ultralytics (PyTorch)
-backend in ONE FastAPI process, and a user can switch between them at runtime.
-Those two stacks only coexist in one import order. Measured on this machine
-(2026-08-17):
-
-    import ultralytics AFTER a Keras prediction  -> SIGSEGV, exit 139
-    import ultralytics BEFORE TensorFlow is used -> both work, in any order,
-                                                    including switching back
-
-Importing ``torch`` early is NOT sufficient: the crash is triggered by importing
-``ultralytics`` itself. So the whole torch stack is imported here, at module
-load, before any backend can pull in TensorFlow. Get this wrong and the API does
-not fail one request — it dies, mid-demo, the first time someone picks the
-second model.
+Two entries, and only one of them is a model. `raed` is the trained four-class
+detector the product serves. `mock` is infrastructure: CI, `docker compose` and
+the test suite all run on it, because the API image ships neither Ultralytics
+nor the weights.
 """
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 from dataclasses import dataclass
 
-# The torch stack is optional (the Keras and mock backends run without it), but
-# when present it MUST be imported here, before anything can reach TensorFlow.
-# Importing ultralytics — not merely torch — is what makes the two safe together.
-with contextlib.suppress(ImportError):
-    import torch  # noqa: F401  # see module docstring
-    import ultralytics  # noqa: F401  # MUST precede any TensorFlow use
-
 from predict.damage_classes import DetectorClassifier
-from predict.interface import Classifier as LegacyClassifier
 
 logger = logging.getLogger(__name__)
 
 # Roster order is also UI order and default-selection order.
-_ROSTER: tuple[str, ...] = ("raed", "raed-seg", "mock")
-_LEGACY_MODELS: tuple[str, ...] = ("resnet50-phinet", "yolo-cls")
-_ALL_MODELS = _LEGACY_MODELS + _ROSTER
+_ROSTER: tuple[str, ...] = ("raed", "mock")
 _DEFAULT_ENABLED = "raed"
 
 # Reasons are message keys, translated in the frontend — never raw English.
@@ -49,10 +26,7 @@ REASON_DEPENDENCY_MISSING = "dependency_missing"
 REASON_LOAD_FAILED = "load_failed"
 
 _DISPLAY_NAMES = {
-    "resnet50-phinet": "ResNet50 (PHI-Net)",
-    "yolo-cls": "YOLO11-cls",
     "raed": "Trained Model",
-    "raed-seg": "Segmentation Model",
     "mock": "Mock",
 }
 
@@ -81,11 +55,10 @@ class ModelInfo:
     reason: str | None
 
 
-def _load(model_id: str) -> DetectorClassifier | LegacyClassifier:
+def _load(model_id: str) -> DetectorClassifier:
     """Import and construct one backend.
 
-    Imports are local so that selecting the mock never pulls in TensorFlow or
-    torch.
+    Imports are local so that selecting the mock never pulls in torch.
 
     Raises:
         UnknownModelError: the id is not registered.
@@ -95,29 +68,17 @@ def _load(model_id: str) -> DetectorClassifier | LegacyClassifier:
         from predict.backends.mock_backend import MockClassifier
 
         return MockClassifier()
-    if model_id == "resnet50-phinet":
-        from predict.backends.resnet import ResNetClassifier
-
-        return ResNetClassifier()
-    if model_id == "yolo-cls":
-        from predict.backends.yolo import YoloClassifier
-
-        return YoloClassifier()
     if model_id == "raed":
         from predict.backends.raed import RaedClassifier
 
         return RaedClassifier()
-    if model_id == "raed-seg":
-        from predict.backends.raed_seg import RaedSegClassifier
-
-        return RaedSegClassifier()
     raise UnknownModelError(f"unknown model id: {model_id}")
 
 
-# Loaded backends are cached: a Keras ResNet takes seconds to load and must not
-# be re-read per request. Failures are deliberately NOT cached, so a model
-# becomes available as soon as its weights appear.
-_cache: dict[str, DetectorClassifier | LegacyClassifier] = {}
+# Loaded backends are cached: reading a checkpoint takes seconds and must not
+# happen per request. Failures are deliberately NOT cached, so a model becomes
+# available as soon as its weights appear.
+_cache: dict[str, DetectorClassifier] = {}
 
 
 def _enabled_ids() -> list[str]:
@@ -139,7 +100,7 @@ def _enabled_ids() -> list[str]:
     return enabled
 
 
-def get_classifier(model_id: str | None = None) -> DetectorClassifier | LegacyClassifier:
+def get_classifier(model_id: str | None = None) -> DetectorClassifier:
     """Return a loaded backend by id, or the default when id is None.
 
     Raises:
@@ -147,7 +108,7 @@ def get_classifier(model_id: str | None = None) -> DetectorClassifier | LegacyCl
         ModelUnavailableError: the backend exists but cannot load.
     """
     resolved = model_id or default_model_id()
-    if resolved not in _ALL_MODELS:
+    if resolved not in _ROSTER:
         raise UnknownModelError(f"unknown model id: {resolved}")
     if resolved not in _cache:
         _cache[resolved] = _load(resolved)

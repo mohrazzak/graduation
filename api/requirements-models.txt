@@ -1,12 +1,8 @@
-# Heavy, OPTIONAL classifier dependencies. Deliberately NOT in requirements.txt:
+# Heavy, OPTIONAL detector dependencies. Deliberately NOT in requirements.txt:
 # the base Docker image and the free-tier cloud deployment run the mock backend,
-# which needs none of this. Install locally to run the real models:
+# which needs none of this. Install locally to run the real model:
 #
 #   .venv/bin/pip install -r requirements-models.txt
-#
-# ⚠ At runtime torch must be imported before tensorflow or the process
-# segfaults — predict/registry.py handles that, and its docstring explains why.
-tensorflow==2.21.0
 torch==2.12.0
 ultralytics==8.4.56
 numpy>=1.26

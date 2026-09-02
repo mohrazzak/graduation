@@ -1,9 +1,4 @@
-"""The Ultralytics adapters map real detector-shaped output once, per checkpoint.
-
-Both trained runs share one adapter, so each case runs against both and asserts
-that neither will accept the other's class names — a silent remap would give a
-wrong verdict with full confidence.
-"""
+"""The Ultralytics adapter maps real detector-shaped output once."""
 
 import io
 
@@ -11,17 +6,7 @@ import pytest
 from PIL import Image
 
 from predict.backends.raed import RaedClassifier
-from predict.backends.raed_seg import RaedSegClassifier
-from predict.damage_classes import (
-    MODEL_CLASS_NAMES,
-    SEG_MODEL_CLASS_NAMES,
-    NoDetectionError,
-)
-
-BACKENDS = [
-    pytest.param(RaedClassifier, MODEL_CLASS_NAMES, id="raed"),
-    pytest.param(RaedSegClassifier, SEG_MODEL_CLASS_NAMES, id="raed-seg"),
-]
+from predict.damage_classes import MODEL_CLASS_NAMES, NoDetectionError
 
 
 def _image_bytes() -> bytes:
@@ -45,7 +30,7 @@ class Boxes:
         self.xyxyn = Values(xyxyn)
 
 
-def _model(names, boxes):  # noqa: ANN001, ANN202 - external model seam
+def _model(boxes, names=MODEL_CLASS_NAMES):  # noqa: ANN001, ANN202 - external model seam
     class Result:
         pass
 
@@ -69,11 +54,10 @@ def _weights(tmp_path):  # noqa: ANN001, ANN202
     return str(weights)
 
 
-@pytest.mark.parametrize(("backend", "names"), BACKENDS)
-def test_adapter_returns_normalized_detector_contract(backend, names, tmp_path) -> None:
+def test_adapter_returns_normalized_detector_contract(tmp_path) -> None:
     boxes = Boxes([1.0, 3.0], [0.91, 0.62], [[0.1, 0.2, 0.4, 0.8], [0.2, 0.1, 0.9, 0.95]])
-    classifier = backend(
-        weights_path=_weights(tmp_path), model_factory=lambda _p: _model(names, boxes)
+    classifier = RaedClassifier(
+        weights_path=_weights(tmp_path), model_factory=lambda _p: _model(boxes)
     )
 
     prediction = classifier.classify(_image_bytes())
@@ -84,27 +68,21 @@ def test_adapter_returns_normalized_detector_contract(backend, names, tmp_path) 
     assert prediction.detections[0].box.x1 == pytest.approx(0.1)
 
 
-@pytest.mark.parametrize(("backend", "names"), BACKENDS)
-def test_adapter_raises_no_detection_instead_of_inventing_no_damage(
-    backend, names, tmp_path
-) -> None:
-    classifier = backend(
+def test_adapter_raises_no_detection_instead_of_inventing_no_damage(tmp_path) -> None:
+    classifier = RaedClassifier(
         weights_path=_weights(tmp_path),
-        model_factory=lambda _p: _model(names, Boxes([], [], [])),
+        model_factory=lambda _p: _model(Boxes([], [], [])),
     )
 
     with pytest.raises(NoDetectionError):
         classifier.classify(_image_bytes())
 
 
-@pytest.mark.parametrize(("backend", "names"), BACKENDS)
-def test_adapter_clamps_edge_boxes_instead_of_rejecting_the_upload(
-    backend, names, tmp_path
-) -> None:
+def test_adapter_clamps_edge_boxes_instead_of_rejecting_the_upload(tmp_path) -> None:
     """`xyxyn` can land a hair outside 0..1 on an edge-touching detection."""
     boxes = Boxes([0.0], [0.8], [[-0.0000031, 0.0, 1.0000024, 1.0]])
-    classifier = backend(
-        weights_path=_weights(tmp_path), model_factory=lambda _p: _model(names, boxes)
+    classifier = RaedClassifier(
+        weights_path=_weights(tmp_path), model_factory=lambda _p: _model(boxes)
     )
 
     box = classifier.classify(_image_bytes()).detections[0].box
@@ -112,28 +90,21 @@ def test_adapter_clamps_edge_boxes_instead_of_rejecting_the_upload(
     assert (box.x1, box.x2) == (0.0, 1.0)
 
 
-@pytest.mark.parametrize(("backend", "names"), BACKENDS)
-def test_adapter_refuses_the_other_checkpoints_class_names(
-    backend, names, tmp_path
-) -> None:
-    other = SEG_MODEL_CLASS_NAMES if names is MODEL_CLASS_NAMES else MODEL_CLASS_NAMES
+def test_adapter_refuses_a_checkpoint_with_unknown_class_names(tmp_path) -> None:
+    """A four-class checkpoint must not inherit this domain's severity order."""
+    other = {0: "Grade_0", 1: "Grade_2", 2: "Grade_3", 3: "Grade_4_5"}
 
     with pytest.raises(ValueError, match="class names"):
-        backend(
+        RaedClassifier(
             weights_path=_weights(tmp_path),
-            model_factory=lambda _p: _model(other, Boxes([], [], [])),
+            model_factory=lambda _p: _model(Boxes([], [], []), names=other),
         )
 
 
-@pytest.mark.parametrize(("backend", "names"), BACKENDS)
-def test_each_backend_reads_its_own_weights_variable(
-    backend, names, monkeypatch, tmp_path
-) -> None:
-    monkeypatch.setenv(backend.weights_env, _weights(tmp_path))
-    for other in (RaedClassifier, RaedSegClassifier):
-        if other is not backend:
-            monkeypatch.delenv(other.weights_env, raising=False)
+def test_weights_variable_is_required(monkeypatch) -> None:
+    from predict.registry import ModelUnavailableError
 
-    classifier = backend(model_factory=lambda _p: _model(names, Boxes([], [], [])))
+    monkeypatch.delenv("RAED_WEIGHTS_PATH", raising=False)
 
-    assert classifier.id == backend.id
+    with pytest.raises(ModelUnavailableError):
+        RaedClassifier()
