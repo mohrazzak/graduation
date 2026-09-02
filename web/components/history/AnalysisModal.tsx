@@ -4,14 +4,12 @@
 // history entry shows the same full result as the analyze page did.
 import { useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { BeforeAfter } from "@/components/analyze/BeforeAfter";
 import { ConfidenceBars } from "@/components/analyze/ConfidenceBars";
-import { ModelViewer } from "@/components/analyze/ModelViewer";
 import { RecommendationCard } from "@/components/analyze/RecommendationCard";
 import { HeatmapToggle } from "@/components/analyze/HeatmapToggle";
 import { ImageWithHeatmap } from "@/components/analyze/ImageWithHeatmap";
 import { Button } from "@/components/ui/Button";
-import type { SignedArtifact } from "@/lib/signedArtifact.mts";
+import { GeneratedOutputs, type ArtifactSlot } from "./GeneratedOutputs";
 import { DamageStrip } from "@/components/ui/DamageStrip";
 import { getDamageClass } from "@/lib/damage-classes";
 import type { Analysis } from "@/lib/types";
@@ -24,21 +22,10 @@ export interface AnalysisModalProps {
   imageUrl: string | null;
   /** Signed heatmap URL, resolved lazily by the opener; null while pending/failed. */
   heatmapUrl: string | null;
-  /** Signing state of the restored image, when one was generated. */
-  repairedArtifact: SignedArtifact;
-  /** Signing state of the kept 3D model, when one was generated. */
-  modelArtifact: SignedArtifact;
-  beforeModelArtifact: SignedArtifact;
-  /** Requests a fresh signed URL for a restored image that failed to load. */
-  onRetryRepaired: () => void;
-  /** Requests a fresh signed URL for a 3D model that failed to load. */
-  onRetryModel: () => void;
-  onRetryBeforeModel: () => void;
-  /** Marks a signed restored image whose actual media request failed. */
-  onRepairedLoadError: () => void;
-  /** Marks a signed GLB whose actual media request or parse failed. */
-  onModelLoadError: () => void;
-  onBeforeModelLoadError: () => void;
+  /** Signing state and recovery handlers for each generated output. */
+  repaired: ArtifactSlot;
+  model: ArtifactSlot;
+  beforeModel: ArtifactSlot;
   /** Resolves true on success (the opener closes the modal), false on failure. */
   onDelete: () => Promise<boolean>;
   onClose: () => void;
@@ -51,15 +38,9 @@ export function AnalysisModal({
   analysis,
   imageUrl,
   heatmapUrl,
-  repairedArtifact,
-  modelArtifact,
-  beforeModelArtifact,
-  onRetryRepaired,
-  onRetryModel,
-  onRetryBeforeModel,
-  onRepairedLoadError,
-  onModelLoadError,
-  onBeforeModelLoadError,
+  repaired,
+  model,
+  beforeModel,
   onDelete,
   onClose,
 }: AnalysisModalProps) {
@@ -165,63 +146,13 @@ export function AnalysisModal({
       <div className="mt-5">
         <RecommendationCard classCode={analysis.class_code} />
       </div>
-      {/* Generated outputs. Each appears only when that service actually ran,
-          so an entry never implies work it does not have. */}
-      {analysis.repaired_path !== null ? (
-        <div className="mt-5">
-          <p className="mb-2 text-xs uppercase tracking-wider text-muted">
-            {t("repair.beforeAfter")}
-          </p>
-          {imageUrl === null ? (
-            <p role="alert" className="text-xs text-muted">
-              {t("history.artifactFailed")}
-            </p>
-          ) : repairedArtifact.status === "ready" ? (
-            <BeforeAfter
-              baseSrc={imageUrl}
-              overlaySrc={repairedArtifact.url}
-              overlayAlt={t("repair.repairedAlt")}
-              onOverlayError={onRepairedLoadError}
-            />
-          ) : repairedArtifact.status === "loading" ? (
-            <p role="status" className="text-xs text-muted">
-              {t("history.artifactLoading")}
-            </p>
-          ) : (
-            <ArtifactFailure onRetry={onRetryRepaired} />
-          )}
-        </div>
-      ) : null}
-      {analysis.model3d_path !== null ? (
-        <div className="mt-5">
-          <p className="mb-2 text-xs uppercase tracking-wider text-muted">
-            {t("model3d.title")}
-          </p>
-          {modelArtifact.status === "ready" ? (
-            <ModelViewer
-              src={modelArtifact.url}
-              downloadName={`damagescale-${analysis.id.slice(0, 8)}.glb`}
-              onError={onModelLoadError}
-            />
-          ) : modelArtifact.status === "loading" ? (
-            <p role="status" className="text-xs text-muted">
-              {t("history.artifactLoading")}
-            </p>
-          ) : (
-            <ArtifactFailure onRetry={onRetryModel} />
-          )}
-        </div>
-      ) : null}
-      {analysis.model3d_before_path !== null ? (
-        <div className="mt-5">
-          <p className="mb-2 text-xs uppercase tracking-wider text-muted">{t("model3d.before.title")}</p>
-          {beforeModelArtifact.status === "ready" ? (
-            <ModelViewer src={beforeModelArtifact.url} downloadName={`damagescale-${analysis.id.slice(0, 8)}-before.glb`} onError={onBeforeModelLoadError} />
-          ) : beforeModelArtifact.status === "loading" ? (
-            <p role="status" className="text-xs text-muted">{t("history.artifactLoading")}</p>
-          ) : <ArtifactFailure onRetry={onRetryBeforeModel} />}
-        </div>
-      ) : null}
+      <GeneratedOutputs
+        analysis={analysis}
+        imageUrl={imageUrl}
+        repaired={repaired}
+        model={model}
+        beforeModel={beforeModel}
+      />
       <div className="mt-6 flex flex-wrap items-center gap-3">
         {analysis.heatmap_path !== null ? (
           <HeatmapToggle
@@ -261,18 +192,5 @@ export function AnalysisModal({
         </p>
       ) : null}
     </ModalShell>
-  );
-}
-
-function ArtifactFailure({ onRetry }: { onRetry: () => void }) {
-  const t = useTranslations();
-
-  return (
-    <div role="alert" className="flex flex-wrap items-center gap-3">
-      <p className="text-xs text-muted">{t("history.artifactFailed")}</p>
-      <Button variant="ghost" onClick={onRetry}>
-        {t("history.artifactRetry")}
-      </Button>
-    </div>
   );
 }

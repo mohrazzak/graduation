@@ -9,7 +9,7 @@ import {
   type ArtifactPersistenceTarget,
 } from "@/lib/artifactPersistence.mts";
 import { artifactUrl } from "@/lib/jobs";
-import { attachArtifact } from "@/lib/supabase/queries";
+import { attachArtifact } from "@/lib/supabase/artifacts";
 
 export interface UseArtifactPersistence extends Pick<ArtifactPersistenceTarget, "kind"> {
   analysisId: string | null;

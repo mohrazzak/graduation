@@ -1,10 +1,9 @@
 // The ONLY data-access layer for analyses + their stored images: storage
 // upload/remove/signed-url and analyses CRUD over the browser Supabase client.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DAMAGE_CLASSES, getDamageClass } from "../damage-classes";
-import type { Analysis, DamageDetection, DamageScores, Prediction } from "../types";
+import type { Analysis, Prediction } from "../types";
+import { toAnalysis } from "./analysisRow";
 import { isSupabaseConfigured } from "./auth";
-import { attachArtifactWithOperations } from "./artifactAttachment.mts";
 import { getSupabaseBrowserClient } from "./client";
 import type { Database, Json } from "./database.types";
 
@@ -21,12 +20,11 @@ export type Result<T> =
   | { data: T; error: null }
   | { data: null; error: QueryErrorCode };
 
-const BUCKET = "analysis-images";
+export const BUCKET = "analysis-images";
 // One hour: comfortably outlives any history-browsing session without leaving
 // long-lived URLs to a private bucket floating around.
 const SIGNED_URL_TTL_SECONDS = 3600;
 
-type AnalysesRow = Database["public"]["Tables"]["analyses"]["Row"];
 
 // Uploads the photo (+ optional heatmap) to storage, inserts the analyses row,
 // and returns it as the shared Analysis type. No orphans: any failure removes
@@ -172,105 +170,8 @@ export async function getSignedUrl(path: string): Promise<Result<string>> {
   return { data: data.signedUrl, error: null };
 }
 
-/** The pipeline outputs that can be attached to an analysis after the fact. */
-export type GeneratedArtifact = "repaired" | "model3d_before" | "model3d_after";
-
-const ARTIFACT_SPEC: Record<
-  GeneratedArtifact,
-  { extension: string; contentType: string }
-> = {
-  repaired: { extension: "_repaired.png", contentType: "image/png" },
-  model3d_before: { extension: "_before.glb", contentType: "model/gltf-binary" },
-  model3d_after: { extension: "_after.glb", contentType: "model/gltf-binary" },
-};
-
-// Attaches a generated output to an existing analysis: uploads it and records
-// its path on the row, so a result survives the job's 30-minute memory TTL and
-// can be reopened from history.
-//
-// upsert: re-running a restoration on the same analysis replaces the stored
-// image rather than failing or orphaning the old one.
-export async function attachArtifact(
-  analysisId: string,
-  kind: GeneratedArtifact,
-  blob: Blob,
-): Promise<Result<string>> {
-  if (!isSupabaseConfigured()) {
-    return { data: null, error: "not_configured" };
-  }
-  const supabase = getSupabaseBrowserClient();
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData.user?.id;
-  if (!userId) {
-    return { data: null, error: "not_authenticated" };
-  }
-
-  const spec = ARTIFACT_SPEC[kind];
-  const path = `${userId}/${analysisId}${spec.extension}`;
-  const attachment = await attachArtifactWithOperations({
-    path,
-    blob,
-    contentType: spec.contentType,
-    operations: {
-      readCurrentPath: async () => {
-        const { data: row, error } = await supabase
-          .from("analyses")
-          .select("repaired_path, model3d_path, model3d_before_path")
-          .eq("id", analysisId)
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (error || row === null) {
-          return { ok: false };
-        }
-        return {
-          ok: true,
-          path:
-            kind === "repaired"
-              ? row.repaired_path
-              : kind === "model3d_before"
-                ? row.model3d_before_path
-                : row.model3d_path,
-        };
-      },
-      upload: async (uploadPath, uploadBlob, contentType) => {
-        const { error } = await supabase.storage
-          .from(BUCKET)
-          .upload(uploadPath, uploadBlob, { contentType, upsert: true });
-        return !error;
-      },
-      updatePath: async (updatePath) => {
-        // Named explicitly rather than via a computed key: a computed key widens the
-        // patch to a string index signature and loses postgrest's column checking.
-        const patch = kind === "repaired"
-          ? { repaired_path: updatePath }
-          : kind === "model3d_before"
-            ? { model3d_before_path: updatePath }
-            : { model3d_path: updatePath };
-        const { data, error } = await supabase
-          .from("analyses")
-          .update(patch)
-          .eq("id", analysisId)
-          .eq("user_id", userId)
-          .select("id")
-          .single();
-        return !error && data !== null;
-      },
-      remove: async (removePath) => {
-        const { error } = await supabase.storage.from(BUCKET).remove([removePath]);
-        if (error) {
-          throw error;
-        }
-      },
-    },
-  });
-  if (!attachment.ok) {
-    return {
-      data: null,
-      error: attachment.stage === "upload" ? "upload_failed" : "save_failed",
-    };
-  }
-  return { data: attachment.path, error: null };
-}
+// The mock API ships the heatmap as raw base64 (no data: prefix); storage
+// wants bytes, so decode via atob into a typed PNG blob.
 
 // Best-effort cleanup. Failures are swallowed on purpose: the caller is
 // already returning the primary error, and a leftover object inside the
@@ -285,61 +186,3 @@ async function removeQuietly(
     // Intentionally ignored — see header comment.
   }
 }
-
-// Validates a DB row into the shared Analysis type, or null when the tier or
-// probabilities are malformed (rows are validated rather than trusted, same as
-// API responses).
-function toAnalysis(row: AnalysesRow): Analysis | null {
-  try {
-    const base = {
-      id: row.id,
-      user_id: row.user_id,
-      image_path: row.image_path,
-      heatmap_path: row.heatmap_path,
-      confidence: row.confidence,
-      model_id: row.model_id,
-      repaired_path: row.repaired_path,
-      model3d_path: row.model3d_path,
-      model3d_before_path: row.model3d_before_path,
-      created_at: row.created_at,
-    };
-    if (row.scale_version === "raed4" && row.class_code) {
-      return {
-        ...base,
-        scale_version: "raed4",
-        class_code: getDamageClass(row.class_code).code,
-        scores: toDamageScores(row.scores),
-        detections: toDetections(row.detections),
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function toDamageScores(value: unknown): DamageScores {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new TypeError("scores");
-  const raw = value as Record<string, unknown>;
-  const scores = {} as DamageScores;
-  for (const { code } of DAMAGE_CLASSES) {
-    if (typeof raw[code] !== "number") throw new TypeError(`scores.${code}`);
-    scores[code] = raw[code];
-  }
-  return scores;
-}
-
-function toDetections(value: unknown): DamageDetection[] {
-  if (!Array.isArray(value) || value.length === 0) throw new TypeError("detections");
-  return value.map((item) => {
-    if (typeof item !== "object" || item === null) throw new TypeError("detection");
-    const raw = item as Record<string, unknown>;
-    const box = raw.box as Record<string, unknown> | null;
-    if (!box || typeof raw.class_code !== "string" || typeof raw.confidence !== "number") throw new TypeError("detection");
-    for (const key of ["x1", "y1", "x2", "y2"] as const) if (typeof box[key] !== "number") throw new TypeError("box");
-    return { class_code: getDamageClass(raw.class_code).code, confidence: raw.confidence, box: { x1: box.x1 as number, y1: box.y1 as number, x2: box.x2 as number, y2: box.y2 as number } };
-  });
-}
-
-// The mock API ships the heatmap as raw base64 (no data: prefix); storage
-// wants bytes, so decode via atob into a typed PNG blob.
