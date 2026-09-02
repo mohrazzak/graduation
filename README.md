@@ -1,21 +1,21 @@
 # DamageScale
 
-AI building-damage classifier (graduation project): upload a building photo,
-get one of six damage levels with confidence scores and a heatmap, saved to
-your personal history. English + Arabic (full RTL).
+AI building-damage assessment (graduation project): upload a building photo,
+get one of four destruction classes with detector confidences, then reconstruct
+the damaged area in 2D and generate 3D models before and after. Saved to your
+personal history. English + Arabic (full RTL).
 
-> The model is **not trained yet** — the API runs in deterministic mock mode
-> (`MOCK_MODE=true`). The real model plugs into `api/predict/model.py` later
-> with zero frontend changes.
+> The model **is trained**. A YOLOv8s detector locates buildings and classifies
+> each one; the image-level verdict is the most severe region found. A
+> deterministic mock backend serves CI and the Docker image, which ship without
+> the weights.
 
-| Level | English           | Arabic      | Color     |
-| ----- | ----------------- | ----------- | --------- |
-| 0     | Intact            | سليم        | `#22C55E` |
-| 1     | Minor damage      | ضرر طفيف    | `#A3E635` |
-| 2     | Moderate damage   | ضرر متوسط   | `#FACC15` |
-| 3     | Severe damage     | ضرر بالغ    | `#F97316` |
-| 4     | Partial collapse  | انهيار جزئي | `#EF4444` |
-| 5     | Total destruction | دمار كامل   | `#991B1B` |
+| Code  | English                  | Arabic                | Color     |
+| ----- | ------------------------ | --------------------- | --------- |
+| `ND`  | No Damage                | بلا ضرر               | `#52C77B` |
+| `SMD` | Slight / Moderate Damage | ضرر طفيف / متوسط      | `#F2C94C` |
+| `HVD` | Heavy / Very Heavy       | ضرر شديد / شديد جداً  | `#F28C28` |
+| `TD`  | Total Damage             | ضرر كلي               | `#FF3B30` |
 
 ## Architecture
 
@@ -24,7 +24,7 @@ Browser ──:3000──> web   (Next.js App Router, /en + /ar)
    │                │
    │                └──> Supabase cloud  (email+password auth, analyses table,
    │                                      private storage bucket, RLS)
-   └────:8000─────> api  (FastAPI: POST /predict, GET /health — mock or model)
+   └────:8000─────> api  (FastAPI: /predict, /models, /health, /jobs/*)
 ```
 
 The **browser** talks to the API directly — the web container never proxies
@@ -60,12 +60,12 @@ so after editing `.env` rebuild with `docker compose up --build`.
 | Piece | Where | URL |
 | ----- | ----- | --- |
 | Web (Next.js) | Vercel | https://project.razzak.me |
-| API (FastAPI mock) | Render free | https://graduation-3cr9.onrender.com |
+| API (FastAPI, mock roster) | Render free | https://graduation-3cr9.onrender.com |
 | Auth + DB + storage | Supabase cloud | — |
 
 Production env: Vercel holds `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_API_URL` (the Render URL);
-Render holds `MOCK_MODE=true` and `CORS_ORIGINS=https://project.razzak.me`.
+Render holds `ENABLED_MODELS=mock` and `CORS_ORIGINS=https://project.razzak.me`.
 Render's repo settings: Dockerfile path `./Dockerfile` (the root-context
 [Dockerfile](Dockerfile) built for Render), root directory empty.
 
@@ -145,7 +145,9 @@ API (from `api/`):
 cd api
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-MOCK_MODE=true .venv/bin/uvicorn main:app --reload --port 8000
+ENABLED_MODELS=mock .venv/bin/uvicorn main:app --reload --port 8000
+# or, with the real weights and generation keys from the root .env:
+../scripts/dev-api.sh
 ```
 
 ### Optional native CUDA repair backend
@@ -204,34 +206,40 @@ docker-compose.yml        one-command demo (web :3000 + api :8000)
 web/                      Next.js app (TypeScript strict, Tailwind, next-intl)
   app/[locale]/           landing, analyze*, history*, how-it-works, login, register  (*=auth)
   components/             ui, analyze, history, landing, layout, auth, how-it-works
-  lib/levels.ts           single source of truth for the 0-5 scale
+  lib/damage-classes.ts   single source of truth for the ND/SMD/HVD/TD scale
   lib/api.ts              ONLY place that calls FastAPI
+  lib/apiContract.ts      validates untrusted API responses (pure, no fetch)
   lib/supabase/           ONLY place that calls Supabase (client/server/queries)
   messages/{en,ar}.json   ALL UI strings (zero hardcoded text in JSX)
-  public/samples/         6 sample photos — each mock-classifies as its level
+  public/samples/         4 sample photos — one per class, each verified correct
 api/                      FastAPI app
-  main.py                 CORS + GET /health + POST /predict
-  predict/interface.py    predict(image_bytes) -> Prediction seam
-  predict/mock.py         deterministic hash-seeded mock (MOCK_MODE=true)
-  predict/model.py        placeholder for the real model + Grad-CAM
+  main.py                 CORS + /health + /models + /predict + /jobs/*
+  predict/damage_classes.py  the domain: codes, boxes, severity aggregation
+  predict/registry.py     which backends exist and which are enabled
+  predict/backends/       raed.py (the trained detector), mock_backend.py
+  jobs/, repair/          polled restoration + 3D reconstruction
 supabase/schema.sql       run once in the Supabase SQL editor
 ```
 
-## Mock mode and the real model
+## The model roster
 
-With `MOCK_MODE=true` the API seeds an RNG with a hash of the uploaded bytes,
-so **the same photo always returns the same level** — demos feel real and are
-repeatable. The six images in `web/public/samples/` are pre-tuned so sample
-`level-N.jpg` classifies as level N.
+`ENABLED_MODELS` selects which backends the API offers:
 
-When the model is trained, implement `predict()` in `api/predict/model.py`
-behind the existing interface (Grad-CAM overlay as base64 PNG), set
-`MOCK_MODE=false`, restart the API. **No frontend change.**
+- `raed` — the trained YOLOv8s detector. Needs `RAED_WEIGHTS_PATH` pointing at
+  a checkpoint outside the repo. This is what the demo runs.
+- `mock` — a deterministic stand-in that hash-seeds an RNG from the uploaded
+  bytes, so **the same photo always returns the same result**. CI, the Docker
+  image and the free-tier deploy run this, because none of them ship the
+  weights or the ~1 GB torch stack.
+
+Both emit the identical `/predict` contract, so nothing in the frontend knows
+or cares which one answered.
 
 ## Definition of Done — status
 
 - [x] `npx tsc --noEmit` passes, zero `any`
-- [x] Same photo always yields the same mock result (pytest-covered)
+- [x] Same photo always yields the same result for a given model (pytest-covered)
+- [x] Each `sample-<CODE>.jpg` is verdicted as its own class by the detector
 - [x] Keyboard-only navigation works; reduced-motion disables animations
 - [x] `/en` and `/ar` fully translated; Arabic mirrors via logical properties
 - [x] One-command demo: `docker compose up`

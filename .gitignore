@@ -27,15 +27,12 @@ HANDOFF.md
 .claude/stop-failure-events.jsonl
 .claude/quota-blocked.json
 
-# Model weights — never in the repo. The serving checkpoint lives outside it
-# (RAED_WEIGHTS_PATH, RAED_SEG_WEIGHTS_PATH). The root best.pt / best2.pt are
-# working copies: best.pt duplicates the serving detector, best2.pt is the
-# epoch-2 segment run installed as raed_yolov8m_seg_4class.pt.
+# Model weights — never in the repo. The serving checkpoint lives outside it,
+# at RAED_WEIGHTS_PATH.
 *.pt
-best.pt*
 
-# Untracked reference clone. Contains a hardcoded API credential in
-# ai/generate_3d_fast.py — must never be committed.
+# Reference clone, deleted 2026-09-02. Kept ignored so a re-clone for
+# reference can never be committed — it holds a hardcoded API credential.
 A-Smart-Site-For-Rehabilitating-Damaged-Buildings/
 
 # Local Claude session-recovery config

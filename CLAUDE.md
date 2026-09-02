@@ -5,17 +5,17 @@ locates buildings and assesses one of four destruction classes, then users can
 select the exact area to reconstruct in 2D and explicitly generate independent
 3D models before rebuilding and after reconstruction.
 
-**Raed's model IS trained.** It is the only active product model. Legacy PHI-3
-classifier source remains in the repository for historical compatibility but
-is not exposed by the active roster. A deterministic four-class mock remains
-for tests and environments without weights.
+**Raed's model IS trained, and it is now the only model in the repository.**
+The retired PHI-3 classifiers (ResNet50, YOLO11-cls), their three-tier scale
+and the YOLOv8m-seg comparison run were all deleted on 2026-09-02 — source,
+tests, weights and env vars. A deterministic four-class mock remains, and it is
+not an unused model: CI, `docker compose` and the whole test suite run on it.
 
-**Build status (2026-08-23):** four-class Raed detection, normalized boxes,
+**Build status (2026-09-02):** four-class Raed detection, normalized boxes,
 truthful no-detection handling, editable selective masks, backend-measured job
-timings, versioned legacy history, and explicit before/after Tripo 3D runs are
-implemented on `feat/three-tier-pipeline`. The earlier three-tier classifier
-registry, polled job API, restoration pipeline, and 3D viewer remain in the
-repository where needed for historical compatibility.
+timings, and explicit before/after Tripo 3D runs are implemented on
+`feat/three-tier-pipeline`. The polled job API, restoration pipeline and 3D
+viewer are live. Everything that served the retired three-tier scale is gone.
 Supabase now runs as a LOCAL `supabase start` stack (the cloud project was
 deleted; DNS NXDOMAIN, verified 2026-08-31). The full
 register→analyze→save→history flow is browser-verified against it in both
@@ -33,12 +33,11 @@ Generation-service balances are external and must be checked live. Never
 auto-start Tripo: both before and after are explicit user actions because each
 run consumes credit. Mask preparation is local and may start automatically.
 
-**TensorFlow and Ultralytics are installed; both real classifiers run.** ResNet
-was verified through the API: sample-NC → NC 96.5%, sample-PC → PC 71.9%,
-sample-GC → GC 98.8%. The API venv now has Ultralytics 8.4.56 with the matching
-CPU pair torch 2.12.1+cpu / torchvision 0.27.1+cpu. All four YOLO backend tests
-and the subprocess ResNet → YOLO → ResNet coexistence guard pass. Compose still
-defaults to `mock` by design because its image excludes the optional model stack.
+**TensorFlow is GONE.** It was imported by nothing except the retired ResNet, so
+deleting that backend removed the dependency and, with it, the whole
+torch-before-TensorFlow ordering hazard. The API venv runs Ultralytics 8.4.56
+with the matching CPU pair torch 2.12.1+cpu / torchvision 0.27.1+cpu. Compose
+still defaults to `mock` by design because its image excludes the model stack.
 
 ⚠ **Both external generation services were last observed out of credit.**
 Gemini image editing returned 429 and the last known Tripo balance was 0. Do not
@@ -90,29 +89,24 @@ These are the exact class names emitted by Raed's YOLOv8s detector.
 | `TD` | Total Damage | ضرر كلي | `#FF3B30` |
 
 Single source of truth: `web/lib/damage-classes.ts` (`DAMAGE_CLASSES`) and
-`api/predict/damage_classes.py`. Legacy `tiers.*` is history-only.
+`api/predict/damage_classes.py`. There is no other scale; the legacy
+`tiers.*` domain was deleted on 2026-09-02.
 
 Aggregation is conservative: the most severe retained detection wins; within
 each class the maximum detector confidence is reported. Scores are detector
 confidences, not normalized probabilities. No retained boxes returns
 `no_detection`, never `ND`.
 
-⚠ **The UI shows ONE verdict per image, never a label per box.** Both active
-models are localization models (`raed` is task `detect`, `raed-seg` is task
-`segment`), so they emit a class per region — but the image-level class is a
-derived most-severe-wins summary, and a photo carrying three differently
-labelled boxes reads as three competing answers. `VerdictOverlay` therefore
-draws every box in the *verdict's* colour with no per-box text, plus a single
-badge. Do not restore per-detection labels: an examiner asking "why does one
-box say ND and the panel say TD?" is the exact confusion this removed. The
-per-detection classes are still returned by `/predict` and still persisted.
+⚠ **The image-level class is DERIVED, not predicted.** `raed` is task `detect`:
+it emits a class per region. Aggregation turns those into one verdict, and the
+UI draws no boxes at all — see the ops note on this, which explains why, before
+changing it.
 
 ### Trained models
 
 | id | What | Val accuracy |
 | -- | ---- | ------------ |
 | `raed` | **Trained Model** (YOLOv8s detector under the hood) | checkpoint-defined |
-| `raed-seg` | **Segmentation Model** (YOLOv8m-seg run; opt-in compare, NOT the default) | checkpoint-defined |
 | `mock` | Deterministic four-class detector stand-in | — |
 
 The public display name is **"Trained Model"**. The id `raed` and the persisted
@@ -129,19 +123,18 @@ The serving detector is `raed_yolov8s_4class.pt` (22 MB, sha256 `a680e240…`),
 copied there from the untracked reference clone on 2026-08-31 so nothing in the
 repo tree is load-bearing. Its `model.names` are exactly
 `No Damage / Slight,Moderate Damage / Heavy,Very Heavy Damage / Total Damage`,
-which is why `validate_model_names` accepts it. `*.pt` is gitignored. The root
-`best.pt` is a redundant byte-identical copy of it (same sha256) — the env var
-points at the outside-the-repo file, not at the root one.
+which is why `validate_model_names` accepts it. `*.pt` is gitignored, and no
+copy lives in the repo tree.
 
-The second entry serves `raed_yolov8m_seg_4class.pt` (218 MB, sha256
-`1e975dfc…`, installed 2026-09-02 from the root `best2.pt`) via
-`RAED_SEG_WEIGHTS_PATH`. Read the ops note below before relying on it: it is a
-**partially trained** run kept for comparison, and roster order deliberately
-leaves `raed` the default.
+Its own recorded validation metrics — precision 0.350, recall 0.464,
+mAP50 0.315, mAP50-95 0.190, from 150 epochs at imgsz 800 — are what
+`web/lib/evaluation.ts` publishes. They are DETECTION metrics; the retired
+classifier accuracies (74.66% / 71.23%, and an older two-class 80.37%) measured
+different models with a different metric and must never be shown beside them.
 
 `ENABLED_MODELS` controls the active roster; default is `raed`.
-`scripts/dev-api.sh` defaults to `raed,raed-seg` so both are pickable on the
-host demo. `ENABLED_MODELS=mock` is what CI and the cloud deploy use.
+`scripts/dev-api.sh` also defaults to `raed`. `ENABLED_MODELS=mock` is what CI
+and the cloud deploy use.
 
 ## Tech stack (FIXED — do not substitute)
 
@@ -149,8 +142,8 @@ host demo. `ENABLED_MODELS=mock` is what CI and the cloud deploy use.
   (`/en` + `/ar`, RTL), @supabase/supabase-js + @supabase/ssr, framer-motion,
   react-dropzone, lucide-react.
 - **api/**: FastAPI (Python 3.11+), uvicorn, python-multipart, Pillow.
-  Classification sits behind the `Classifier` protocol in
-  `api/predict/interface.py`; concrete backends live in `api/predict/backends/`
+  Detection sits behind the `DetectorClassifier` protocol in
+  `api/predict/damage_classes.py`; backends live in `api/predict/backends/`
   and are selected per request from `api/predict/registry.py`.
 - **Supabase cloud**: email+password auth ONLY (no OAuth), `analyses` table,
   private storage bucket `analysis-images`. Schema: `supabase/schema.sql`.
@@ -163,7 +156,7 @@ docker-compose.yml
 web/                    Next.js app
   app/[locale]/         pages: landing, analyze*, history*, how-it-works, login, register  (*=auth)
   components/{ui,analyze,history,layout,...}
-  lib/damage-classes.ts active ND/SMD/HVD/TD scale (`tiers.ts` is legacy)
+  lib/damage-classes.ts THE ND/SMD/HVD/TD scale — single source of truth
   lib/evaluation.ts     measured accuracy, confusion matrices, dataset splits
   lib/types.ts          Prediction, Analysis (shared types)
   lib/api.ts            ONLY place that calls FastAPI (typed, timeout, errors)
@@ -175,9 +168,8 @@ web/                    Next.js app
 api/                    FastAPI app (main.py, schemas.py, tests/)
   predict/damage_classes.py active detector domain and severity aggregation
   predict/registry.py   backend roster, ENABLED_MODELS  (⚠ torch import order)
-  predict/backends/     resnet.py, yolo.py, raed.py, raed_seg.py, mock_backend.py
-    ultralytics_detector.py  shared adapter behind raed + raed-seg
-  requirements-models.txt  optional heavy deps (TensorFlow, torch, ultralytics)
+  predict/backends/     raed.py (the trained detector), mock_backend.py
+  requirements-models.txt  optional heavy deps (torch, ultralytics)
   requirements-repair.txt  optional isolated Diffusers/ControlNet deps
   jobs/store.py         in-process job registry (single process, 30 min TTL)
   jobs/stages.py        LOCAL free stages: building mask, edge map
@@ -211,10 +203,10 @@ npm run lint
 ./scripts/dev-api.sh            # PREFERRED: sources root .env -> real model +
                                 # generation keys + local ControlNet repair
 uvicorn main:app --reload --port 8000   # bare, no env
-ENABLED_MODELS=mock pytest -q   # must pass; mock roster keeps it off TensorFlow
+ENABLED_MODELS=mock pytest -q   # must pass; mock roster keeps it off torch
 pytest -q                       # full run, loads the real weights (slow)
 ruff check .                    # must be clean
-pip install -r requirements-models.txt   # optional: the real classifiers (~3 GB)
+pip install -r requirements-models.txt   # optional: the real detector (torch)
 
 # optional native local repair (stock Docker image intentionally excludes this)
 /home/mohrazzak/projects/graduation/.venv/bin/python -m pip install -r requirements-repair.txt
@@ -336,42 +328,31 @@ The cloud recipe below is kept for re-provisioning.
 
 ## Ops notes for Claude sessions (hard-won, no secrets here)
 
-- ⚠ **`raed-seg` IS WIRED ON PURPOSE (user request, 2026-09-02) but must never
-  become the default.** Do not delete it as a "fix" — and do not promote it.
-  Its weights are the run formerly at `best.pt (1)`, now the root `best2.pt`,
-  installed as `raed_yolov8m_seg_4class.pt`. It is a *different, later* training
-  run, not the detector in service: task `segment` (`yolov8m-seg`, 218 MB,
-  optimizer state still attached, `ckpt["model"]` is None so Ultralytics loads
-  the EMA), saved at **epoch 2** of a 150-epoch schedule. Its class names are
-  `Grade_0_1_No_Damage / Grade_2_Low_Damage / Grade_3_Moderate /
-  Grade_4_5_Very_Heavy_Total`; `SEG_MODEL_CLASS_NAMES` maps them positionally
-  (0→ND, 1→SMD, 2→HVD, 3→TD) — the agreed remap, but NOT 1:1, because
-  `Grade_4_5` merges HVD+TD and Low/Moderate split SMD, which biases it upward.
-  It is worse on every comparable box metric — mAP50 0.204 vs 0.315,
-  mAP50-95 0.127 vs 0.190, precision 0.157 vs 0.350. Measured through the
-  adapter at conf 0.25 on 2026-09-02, it gets **1 of 4 samples right**
-  (ND→TD 0.507, SMD→SMD 0.349, HVD→TD 0.291, TD→TD 0.576) — it calls the
-  *undamaged* building maximum damage. Under most-severe-wins aggregation,
-  demoing this model on stage means showing a wrong verdict. `raed` remains
-  first in `_ROSTER` and therefore the default selection.
-  Its segmentation masks are deliberately NOT exposed: `/predict` carries boxes
-  only and a segment result populates `result.boxes` anyway. Wiring
-  `result.masks` would be a contract + frontend change, still pending if wanted.
-  Ultralytics 8.4.56 reads the 8.4.135 checkpoint; a filename containing
-  `" (1)"` fails `check_suffix`, which is why the installed copy is renamed.
-- ⚠ **TensorFlow + PyTorch coexistence is order-dependent and it SEGFAULTS.**
-  Importing `ultralytics` AFTER a Keras prediction kills the process (exit 139).
-  Importing it BEFORE any TensorFlow use is safe in either direction.
-  `api/predict/registry.py` imports the whole torch stack at module load for
-  exactly this reason — do not "tidy" those imports. Importing `torch` alone is
-  NOT enough. `api/tests/test_backend_coexistence.py` guards it in a subprocess,
-  since a dead process cannot be caught in-process.
+- ⚠ **The UI shows ONE verdict per image and draws NO boxes.** Both trained runs
+  were localization models — `raed` is task `detect` — so they emit a class per
+  region, and the image-level class is a derived most-severe-wins summary, not
+  a model output. An overlay labelling each box separately showed three
+  different answers to a question that has one, so it was removed entirely
+  (2026-09-02, user decision). `/predict` still returns `detections` and they
+  are still persisted; only the drawing is gone. If an examiner asks how the
+  verdict is reached, the answer is "the most severe detected region wins".
+- ⚠ **The YOLOv8m-seg run (`best2.pt` / `raed-seg`) was deleted, not lost.** It
+  was wired briefly on 2026-09-02 and removed the same day: epoch 2 of a
+  150-epoch schedule, worse on every box metric (mAP50 0.204 vs 0.315), and
+  measured through the adapter it got 1 of 4 samples right — calling the
+  *undamaged* building Total Damage. Do not re-add it from a backup. If a
+  FINISHED seg run is exported later, the remap is positional
+  (0→ND, 1→SMD, 2→HVD, 3→TD) and the adapter would need `result.masks`.
+- ✅ **The TensorFlow/PyTorch segfault hazard no longer exists.** It was real:
+  importing `ultralytics` after a Keras prediction killed the process (exit
+  139), which is why `registry.py` used to import the whole torch stack at
+  module load. TensorFlow left with the ResNet backend on 2026-09-02, so the
+  ordering block and its subprocess guard were deleted. Do NOT reintroduce a
+  TensorFlow backend without restoring both — read this file's git history first.
 - Heavy model deps are in `api/requirements-models.txt`, deliberately NOT in
   `requirements.txt`: the base image and the free-tier deploy run the mock.
-  Installing them pulls ~3 GB of CUDA wheels.
 - The GPU is a GTX 1650 Ti (4 GB). The graduation training venv has CUDA-enabled
-  torch, while `api/.venv` deliberately uses torch 2.12.1+cpu; TensorFlow also
-  runs the ResNet on CPU here.
+  torch, while `api/.venv` deliberately uses torch 2.12.1+cpu.
 - The GTX 16xx / compute-capability 7.5 Diffusers path is **FP32 on purpose**.
   Pinned all-FP16 inference deterministically produced NaNs during VAE encode
   and ControlNet step 0. FP32 + sequential CPU offload + attention slicing was
@@ -400,10 +381,9 @@ The cloud recipe below is kept for re-provisioning.
 - **Demo samples are keyed by ACTIVE class code**, one per class:
   `sample-{ND,SMD,HVD,TD}.jpg`. Each was chosen by scoring the validation split
   with the detector itself and keeping an image it gets RIGHT, so a sample can
-  never contradict the model on stage. `SampleStrip` iterates `DAMAGE_CLASSES` —
-  it used to iterate the legacy `DAMAGE_TIERS`, which is why one of its three
-  old samples (`sample-PC.jpg`) dead-ended on `no_detection`. The three legacy
-  `sample-{NC,PC,GC}.jpg` files stay: the ResNet/YOLO-cls tests load them.
+  never contradict the model on stage. `SampleStrip` iterates `DAMAGE_CLASSES`.
+  The legacy `sample-{NC,PC,GC}.jpg` files were deleted with the tests that
+  loaded them.
 - **A model's display name never comes from the API response.** `/predict`
   returns an English-only `model.name`, and Supabase stores only `model_id`, so
   both surfaces resolve through `useModelName()` against `models.names.<id>` in
@@ -435,9 +415,12 @@ The cloud recipe below is kept for re-provisioning.
 - Pre-existing deployment risk: job create/poll/artifact routes are not bearer-
   owned or rate-limited. `git blame dcd36fa -- api/main.py` attributes them to
   pre-branch commit `4285bc77`; fixing ownership is a separate API/client design.
-- The untracked reference repo contains a hardcoded API credential in
-  `A-Smart-Site-For-Rehabilitating-Damaged-Buildings/ai/generate_3d_fast.py`.
-  Never commit it or print the value; the credential must be rotated/revoked.
+- ⚠ The reference clone `A-Smart-Site-For-Rehabilitating-Damaged-Buildings/`
+  was deleted from this machine on 2026-09-02 (unreferenced by any code; the 3D
+  work was already ported into `api/jobs/model3d.py`). It is re-clonable from
+  `git@github.com:RaedSa1em/…`. **Its `ai/generate_3d_fast.py` contains a
+  hardcoded API credential that is still live and still needs rotating** —
+  deleting the local copy did not revoke it. Never commit or print the value.
 - `gh` CLI is not installed; the repo has no git remote yet (will gain one for
   Vercel/Render deployment).
 - next-intl: array messages are read with `t.raw("key") as string[]`. Tailwind
@@ -451,7 +434,7 @@ The cloud recipe below is kept for re-provisioning.
 - [ ] Register → analyze sample → animated result → auto-saved → in history →
       survives logout/login.
 - [ ] Same photo always yields the same result for a given model.
-- [ ] Switching models mid-session does NOT kill the API (segfault guard).
+- [ ] The analyzed photo shows NO detection boxes — one verdict, in the panel.
 - [ ] Each `sample-<CODE>.jpg` is verdicted as its own class by the detector
       (ND 0.639 / SMD 0.642 / HVD 0.537 / TD 0.576, measured 2026-08-31).
 - [ ] Keyboard-only navigation works; reduced-motion disables animations.
@@ -469,9 +452,10 @@ The cloud recipe below is kept for re-provisioning.
   building mask directly.
 - **3D** — Tripo AI (upload → task → poll → GLB with PBR), viewed with
   `@google/model-viewer`.
-- **Grad-CAM** — ~30 lines of `tf.GradientTape` on the ResNet's last conv block,
-  reusing the existing overlay path. Until it lands, `heatmap_base64` is null
-  and every heatmap affordance hides itself.
+- **Grad-CAM** — NOT implemented, and the old plan (`tf.GradientTape` on the
+  ResNet) died with that backend. A detector needs a different technique
+  entirely. `heatmap_base64` is null and every heatmap affordance hides itself,
+  which is the honest state.
 
 Out of scope entirely: OccFacade, cost estimation, the Depth Anything point
 cloud.
