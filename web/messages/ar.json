@@ -294,6 +294,7 @@
     "load_failed": "تعذّر التحميل",
     "names": {
       "raed": "النموذج المدرَّب",
+      "raed-seg": "نموذج التجزئة",
       "mock": "نموذج تجريبي",
       "resnet50-phinet": "ResNet50 (PHI-Net)",
       "yolo-cls": "YOLO11-cls"

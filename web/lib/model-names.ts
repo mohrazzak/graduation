@@ -9,7 +9,7 @@
 import { useTranslations } from "next-intl";
 
 /** Model ids a saved analysis row can reference, including retired backends. */
-export const KNOWN_MODEL_IDS = ["raed", "mock", "resnet50-phinet", "yolo-cls"] as const;
+export const KNOWN_MODEL_IDS = ["raed", "raed-seg", "mock", "resnet50-phinet", "yolo-cls"] as const;
 
 export type KnownModelId = (typeof KNOWN_MODEL_IDS)[number];
 

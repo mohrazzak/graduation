@@ -38,7 +38,7 @@ from predict.interface import Classifier as LegacyClassifier
 logger = logging.getLogger(__name__)
 
 # Roster order is also UI order and default-selection order.
-_ROSTER: tuple[str, ...] = ("raed", "mock")
+_ROSTER: tuple[str, ...] = ("raed", "raed-seg", "mock")
 _LEGACY_MODELS: tuple[str, ...] = ("resnet50-phinet", "yolo-cls")
 _ALL_MODELS = _LEGACY_MODELS + _ROSTER
 _DEFAULT_ENABLED = "raed"
@@ -52,6 +52,7 @@ _DISPLAY_NAMES = {
     "resnet50-phinet": "ResNet50 (PHI-Net)",
     "yolo-cls": "YOLO11-cls",
     "raed": "Trained Model",
+    "raed-seg": "Segmentation Model",
     "mock": "Mock",
 }
 
@@ -106,6 +107,10 @@ def _load(model_id: str) -> DetectorClassifier | LegacyClassifier:
         from predict.backends.raed import RaedClassifier
 
         return RaedClassifier()
+    if model_id == "raed-seg":
+        from predict.backends.raed_seg import RaedSegClassifier
+
+        return RaedSegClassifier()
     raise UnknownModelError(f"unknown model id: {model_id}")
 
 

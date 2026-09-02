@@ -102,6 +102,7 @@ confidences, not normalized probabilities. No retained boxes returns
 | id | What | Val accuracy |
 | -- | ---- | ------------ |
 | `raed` | **Trained Model** (YOLOv8s detector under the hood) | checkpoint-defined |
+| `raed-seg` | **Segmentation Model** (YOLOv8m-seg run; opt-in compare, NOT the default) | checkpoint-defined |
 | `mock` | Deterministic four-class detector stand-in | — |
 
 The public display name is **"Trained Model"**. The id `raed` and the persisted
@@ -118,10 +119,19 @@ The serving detector is `raed_yolov8s_4class.pt` (22 MB, sha256 `a680e240…`),
 copied there from the untracked reference clone on 2026-08-31 so nothing in the
 repo tree is load-bearing. Its `model.names` are exactly
 `No Damage / Slight,Moderate Damage / Heavy,Very Heavy Damage / Total Damage`,
-which is why `validate_model_names` accepts it. `*.pt` is gitignored.
+which is why `validate_model_names` accepts it. `*.pt` is gitignored. The root
+`best.pt` is a redundant byte-identical copy of it (same sha256) — the env var
+points at the outside-the-repo file, not at the root one.
+
+The second entry serves `raed_yolov8m_seg_4class.pt` (218 MB, sha256
+`1e975dfc…`, installed 2026-09-02 from the root `best2.pt`) via
+`RAED_SEG_WEIGHTS_PATH`. Read the ops note below before relying on it: it is a
+**partially trained** run kept for comparison, and roster order deliberately
+leaves `raed` the default.
 
 `ENABLED_MODELS` controls the active roster; default is `raed`.
-`ENABLED_MODELS=mock` is what CI and the cloud deploy use.
+`scripts/dev-api.sh` defaults to `raed,raed-seg` so both are pickable on the
+host demo. `ENABLED_MODELS=mock` is what CI and the cloud deploy use.
 
 ## Tech stack (FIXED — do not substitute)
 
@@ -155,7 +165,8 @@ web/                    Next.js app
 api/                    FastAPI app (main.py, schemas.py, tests/)
   predict/damage_classes.py active detector domain and severity aggregation
   predict/registry.py   backend roster, ENABLED_MODELS  (⚠ torch import order)
-  predict/backends/     resnet.py, yolo.py, raed.py, mock_backend.py
+  predict/backends/     resnet.py, yolo.py, raed.py, raed_seg.py, mock_backend.py
+    ultralytics_detector.py  shared adapter behind raed + raed-seg
   requirements-models.txt  optional heavy deps (TensorFlow, torch, ultralytics)
   requirements-repair.txt  optional isolated Diffusers/ControlNet deps
   jobs/store.py         in-process job registry (single process, 30 min TTL)
@@ -315,23 +326,29 @@ The cloud recipe below is kept for re-provisioning.
 
 ## Ops notes for Claude sessions (hard-won, no secrets here)
 
-- ⚠ **The untracked root file `best.pt (1)` is REJECTED — do not wire it in.**
-  Inspected 2026-08-31. It is a *different, later* training run, not the detector
-  currently in service: task `segment` (`yolov8m-seg`, 218 MB, optimizer state
-  still attached, `ckpt["model"]` is None so only the EMA is usable), saved at
-  **epoch 2** of a 150-epoch schedule. Its class names are
+- ⚠ **`raed-seg` IS WIRED ON PURPOSE (user request, 2026-09-02) but must never
+  become the default.** Do not delete it as a "fix" — and do not promote it.
+  Its weights are the run formerly at `best.pt (1)`, now the root `best2.pt`,
+  installed as `raed_yolov8m_seg_4class.pt`. It is a *different, later* training
+  run, not the detector in service: task `segment` (`yolov8m-seg`, 218 MB,
+  optimizer state still attached, `ckpt["model"]` is None so Ultralytics loads
+  the EMA), saved at **epoch 2** of a 150-epoch schedule. Its class names are
   `Grade_0_1_No_Damage / Grade_2_Low_Damage / Grade_3_Moderate /
-  Grade_4_5_Very_Heavy_Total`, which `validate_model_names` rejects outright and
-  which do not map 1:1 onto ND/SMD/HVD/TD (`Grade_4_5` merges HVD+TD;
-  Low/Moderate split SMD). It is worse on every comparable box metric —
-  mAP50 0.204 vs 0.315, mAP50-95 0.127 vs 0.190, precision 0.157 vs 0.350 — and
-  at conf 0.25 it fired the most-severe class on all three shipped samples,
-  including calling the undamaged `sample-NC.jpg` maximum damage. Under the
-  conservative most-severe-wins aggregation that makes the demo lie. If a
-  finished run is exported later, the agreed remap is positional
-  (0→ND, 1→SMD, 2→HVD, 3→TD) and the adapter must be extended to read
-  `result.masks`, not just `boxes.xyxyn`. Ultralytics 8.4.56 does read the
-  8.4.135 checkpoint; a filename containing `" (1)"` fails `check_suffix`.
+  Grade_4_5_Very_Heavy_Total`; `SEG_MODEL_CLASS_NAMES` maps them positionally
+  (0→ND, 1→SMD, 2→HVD, 3→TD) — the agreed remap, but NOT 1:1, because
+  `Grade_4_5` merges HVD+TD and Low/Moderate split SMD, which biases it upward.
+  It is worse on every comparable box metric — mAP50 0.204 vs 0.315,
+  mAP50-95 0.127 vs 0.190, precision 0.157 vs 0.350. Measured through the
+  adapter at conf 0.25 on 2026-09-02, it gets **1 of 4 samples right**
+  (ND→TD 0.507, SMD→SMD 0.349, HVD→TD 0.291, TD→TD 0.576) — it calls the
+  *undamaged* building maximum damage. Under most-severe-wins aggregation,
+  demoing this model on stage means showing a wrong verdict. `raed` remains
+  first in `_ROSTER` and therefore the default selection.
+  Its segmentation masks are deliberately NOT exposed: `/predict` carries boxes
+  only and a segment result populates `result.boxes` anyway. Wiring
+  `result.masks` would be a contract + frontend change, still pending if wanted.
+  Ultralytics 8.4.56 reads the 8.4.135 checkpoint; a filename containing
+  `" (1)"` fails `check_suffix`, which is why the installed copy is renamed.
 - ⚠ **TensorFlow + PyTorch coexistence is order-dependent and it SEGFAULTS.**
   Importing `ultralytics` AFTER a Keras prediction kills the process (exit 139).
   Importing it BEFORE any TensorFlow use is safe in either direction.

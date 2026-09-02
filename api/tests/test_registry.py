@@ -47,9 +47,36 @@ def test_enabled_models_can_show_raed_alone(monkeypatch):
 
 def test_roster_order_is_stable_regardless_of_input_order(monkeypatch):
     """Roster order is UI order; ENABLED_MODELS must not reshuffle it."""
-    monkeypatch.setenv("ENABLED_MODELS", "mock,raed")
+    monkeypatch.setenv("ENABLED_MODELS", "mock,raed-seg,raed")
     monkeypatch.delenv("RAED_WEIGHTS_PATH", raising=False)
-    assert [m.id for m in list_models()] == ["raed", "mock"]
+    monkeypatch.delenv("RAED_SEG_WEIGHTS_PATH", raising=False)
+    assert [m.id for m in list_models()] == ["raed", "raed-seg", "mock"]
+
+
+def test_both_trained_runs_can_be_offered_together(monkeypatch):
+    """The two checkpoints are independent roster entries, raed first."""
+    monkeypatch.setenv("ENABLED_MODELS", "raed,raed-seg")
+    monkeypatch.delenv("RAED_WEIGHTS_PATH", raising=False)
+    monkeypatch.delenv("RAED_SEG_WEIGHTS_PATH", raising=False)
+    assert [m.id for m in list_models()] == ["raed", "raed-seg"]
+
+
+def test_the_segment_run_is_listed_with_its_own_name_and_reason(monkeypatch):
+    monkeypatch.setenv("ENABLED_MODELS", "raed-seg")
+    monkeypatch.delenv("RAED_SEG_WEIGHTS_PATH", raising=False)
+    entry = next(m for m in list_models() if m.id == "raed-seg")
+    assert entry.available is False
+    assert entry.reason == "weights_missing"
+    assert entry.name == "Segmentation Model"
+
+
+def test_the_segment_run_has_its_own_weights_variable(monkeypatch):
+    """RAED_WEIGHTS_PATH must never satisfy the segment backend."""
+    monkeypatch.setenv("ENABLED_MODELS", "raed-seg")
+    monkeypatch.setenv("RAED_WEIGHTS_PATH", "/nonexistent/raed.pt")
+    monkeypatch.delenv("RAED_SEG_WEIGHTS_PATH", raising=False)
+    with pytest.raises(ModelUnavailableError):
+        get_classifier("raed-seg")
 
 
 def test_unknown_ids_in_enabled_models_are_ignored(monkeypatch):

@@ -22,6 +22,20 @@ MODEL_INDEX_TO_CODE: dict[int, DamageCode] = {
     3: "TD",
 }
 
+# The segmentation run labels the same four severity steps with its own grade
+# vocabulary. The mapping onto this domain is POSITIONAL, which is exact for
+# indices 0 and 1 but approximate at the top: `Grade_4_5_Very_Heavy_Total`
+# merges what this domain splits into HVD and TD, so index 3 reports TD and
+# that class is over-reported relative to the box detector. Listed explicitly
+# rather than inferred, so a checkpoint with different labels is refused
+# instead of being silently renumbered onto these codes.
+SEG_MODEL_CLASS_NAMES: dict[int, str] = {
+    0: "Grade_0_1_No_Damage",
+    1: "Grade_2_Low_Damage",
+    2: "Grade_3_Moderate",
+    3: "Grade_4_5_Very_Heavy_Total",
+}
+
 
 class NoDetectionError(RuntimeError):
     """Raised when no detector box clears the configured threshold."""
@@ -81,11 +95,19 @@ class DetectorClassifier(Protocol):
         ...
 
 
-def validate_model_names(names: Mapping[int, str]) -> None:
-    """Refuse a checkpoint whose numeric labels do not match the known model."""
+def validate_model_names(
+    names: Mapping[int, str], expected: Mapping[int, str] = MODEL_CLASS_NAMES
+) -> None:
+    """Refuse a checkpoint whose numeric labels do not match the known model.
+
+    Each backend passes the exact label set its own checkpoint is known to
+    carry. Accepting "any four classes" would let an unrelated run inherit this
+    domain's severity order, and under most-severe-wins aggregation a silent
+    mislabel becomes a confidently wrong verdict.
+    """
     normalized = {int(index): str(name) for index, name in names.items()}
-    if normalized != MODEL_CLASS_NAMES:
-        raise ValueError("Raed checkpoint class names do not match the four-class contract")
+    if normalized != dict(expected):
+        raise ValueError("checkpoint class names do not match the four-class contract")
 
 
 def aggregate_detections(detections: Sequence[Detection]) -> Prediction:

@@ -294,6 +294,7 @@
     "load_failed": "Failed to load",
     "names": {
       "raed": "Trained Model",
+      "raed-seg": "Segmentation Model",
       "mock": "Mock",
       "resnet50-phinet": "ResNet50 (PHI-Net)",
       "yolo-cls": "YOLO11-cls"

@@ -20,17 +20,24 @@ if [[ -f "$repo_root/.env" ]]; then
   set +a
 fi
 
-export ENABLED_MODELS="${caller_models:-raed}"
+# Both trained runs are offered on the host demo; roster order makes the
+# yolov8s detector the default selection and the segment run an opt-in compare.
+export ENABLED_MODELS="${caller_models:-raed,raed-seg}"
 
 # The CUDA-enabled training venv doubles as the isolated repair worker; the API
 # venv is deliberately CPU-only (see CLAUDE.md on the segfault-safe torch pin).
 export LOCAL_REPAIR_PYTHON="${LOCAL_REPAIR_PYTHON:-/home/mohrazzak/projects/graduation/.venv/bin/python}"
 export REPAIR_BACKEND="${REPAIR_BACKEND:-auto}"
 
-if [[ -n "${RAED_WEIGHTS_PATH:-}" && ! -f "${RAED_WEIGHTS_PATH}" ]]; then
-  echo "RAED_WEIGHTS_PATH does not exist: ${RAED_WEIGHTS_PATH}" >&2
-  echo "The roster will report weights_missing and /predict will 503." >&2
-fi
+for weights_var in RAED_WEIGHTS_PATH RAED_SEG_WEIGHTS_PATH; do
+  weights_path="${!weights_var:-}"
+  if [[ -n "$weights_path" && ! -f "$weights_path" ]]; then
+    echo "$weights_var does not exist: $weights_path" >&2
+    echo "That model will report weights_missing and its /predict will 503." >&2
+  fi
+done
 
-echo "roster=${ENABLED_MODELS:-mock}  weights=${RAED_WEIGHTS_PATH:-<unset>}  repair=${REPAIR_BACKEND}"
+echo "roster=${ENABLED_MODELS:-mock}  repair=${REPAIR_BACKEND}"
+echo "  raed     = ${RAED_WEIGHTS_PATH:-<unset>}"
+echo "  raed-seg = ${RAED_SEG_WEIGHTS_PATH:-<unset>}"
 exec ./.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 "$@"
