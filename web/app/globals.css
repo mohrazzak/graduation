@@ -25,8 +25,8 @@ html[dir="rtl"] {
   --font-body: var(--font-arabic);
   /* WHY the mono fallback: next-intl formatters emit Arabic-Indic digits in /ar,
      and JetBrains Mono has no Arabic glyphs — without this they would fall back
-     to an arbitrary system font. Latin glyphs (the "L4" brand digits) still hit
-     JetBrains Mono first; Arabic-Indic digits render in Cairo. */
+     to an arbitrary system font. Latin glyphs (class codes and the n/4 severity
+     readout) still hit JetBrains Mono first; Arabic-Indic digits render in Cairo. */
   --font-mono: var(--font-jetbrains), var(--font-arabic);
 }
 
@@ -120,7 +120,7 @@ body::before {
     display: block;
     color: #111;
     /* Chrome/Edge strip backgrounds by default ("Background graphics" off),
-       which would erase ScaleStrip segments and probability bar fills. */
+       which would erase DamageStrip segments and the detector-score bar fills. */
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
