@@ -7,7 +7,7 @@
 //
 // Split from api.ts so it stays pure: no fetch, no timeouts, no environment.
 import { ApiError } from "./apiError";
-import { DAMAGE_CLASSES, getDamageClass } from "./damage-classes";
+import { DAMAGE_CLASSES, getDamageClass, strayScaleKeys } from "./damage-classes";
 import type { DamageDetection, DamageScores, ModelInfo, Prediction } from "./types";
 
 // Validates one untrusted model entry from /models or /predict.
@@ -81,6 +81,13 @@ export function parsePrediction(body: unknown): Prediction {
     }
     scores[code] = value;
   }
+  // Exactly the scale, not a superset: a body carrying a retired code (PC) or a
+  // fifth class would otherwise be accepted with the stray key silently dropped,
+  // so a server still on an older scale would look like a healthy four-class one.
+  const stray = strayScaleKeys(Object.keys(entries));
+  if (stray.length > 0) {
+    throw contractViolation(`scores has keys outside the scale: ${stray.join(", ")}`);
+  }
 
   if (!Array.isArray(raw.detections) || raw.detections.length === 0) {
     throw contractViolation("detections is missing or empty");
@@ -94,7 +101,17 @@ export function parsePrediction(body: unknown): Prediction {
     if (typeof detection.class_code !== "string" || !box) {
       throw contractViolation(`detections.${index} is malformed`);
     }
-    const detectedClass = getDamageClass(detection.class_code).code;
+    // getDamageClass throws a bare RangeError on an off-scale code; convert it
+    // so an old-scale response leaves this module as a typed contract error
+    // naming the field, like every other violation here.
+    let detectedClass;
+    try {
+      detectedClass = getDamageClass(detection.class_code).code;
+    } catch {
+      throw contractViolation(
+        `detections.${index} class_code ${detection.class_code} is not in the scale`,
+      );
+    }
     const detectedConfidence = detection.confidence;
     const coordinates = [box.x1, box.y1, box.x2, box.y2];
     if (

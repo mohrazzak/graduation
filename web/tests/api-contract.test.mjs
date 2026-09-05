@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DAMAGE_CLASSES, getDamageClass } from "../lib/damage-classes.ts";
+import { DAMAGE_CLASSES, getDamageClass, strayScaleKeys } from "../lib/damage-classes.ts";
 
 const valid = {
   class_code: "HVD",
@@ -19,4 +19,30 @@ test("active damage domain has the exact four-class order", () => {
 
 test("unknown and legacy codes are rejected", () => {
   assert.throws(() => getDamageClass("GC"), /ND, SMD, HVD or TD/);
+});
+
+// --- the scale is a CLOSED set ------------------------------------------
+// Iterating DAMAGE_CLASSES proves the four codes are PRESENT, not that nothing
+// else is. strayScaleKeys is the shared guard both boundaries use — lib/apiContract.ts
+// (the /predict body) and lib/supabase/analysisRow.ts (a stored row) — so a payload
+// still on the retired NC/PC/GC scale is refused instead of being silently
+// narrowed to four keys and rendered as a healthy four-class result.
+
+test("the exact four-class key set has no stray keys", () => {
+  assert.deepEqual(strayScaleKeys(Object.keys(valid.scores)), []);
+  assert.deepEqual(strayScaleKeys(DAMAGE_CLASSES.map(({ code }) => code)), []);
+});
+
+test("retired three-tier keys are reported as stray", () => {
+  assert.deepEqual(strayScaleKeys(["NC", "PC", "GC"]).sort(), ["GC", "NC", "PC"]);
+  assert.deepEqual(strayScaleKeys([...Object.keys(valid.scores), "PC"]), ["PC"]);
+});
+
+test("six-level keys are reported as stray", () => {
+  const sixLevel = ["0", "1", "2", "3", "4", "5"];
+  assert.deepEqual(strayScaleKeys(sixLevel), sixLevel);
+});
+
+test("a fifth class cannot slip in unnoticed", () => {
+  assert.deepEqual(strayScaleKeys([...DAMAGE_CLASSES.map((c) => c.code), "XD"]), ["XD"]);
 });

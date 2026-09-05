@@ -7,7 +7,7 @@
 //
 // Kept apart from queries.ts because none of this touches Supabase: it is pure,
 // synchronous, and testable without a client or a network.
-import { DAMAGE_CLASSES, getDamageClass } from "../damage-classes";
+import { DAMAGE_CLASSES, getDamageClass, strayScaleKeys } from "../damage-classes";
 import type { Analysis, DamageDetection, DamageScores } from "../types";
 import type { Database } from "./database.types";
 
@@ -47,8 +47,19 @@ function toDamageScores(value: unknown): DamageScores {
   const raw = value as Record<string, unknown>;
   const scores = {} as DamageScores;
   for (const { code } of DAMAGE_CLASSES) {
-    if (typeof raw[code] !== "number") throw new TypeError(`scores.${code}`);
-    scores[code] = raw[code];
+    const score = raw[code];
+    // Range-checked like the API boundary: a stored 4.2 would otherwise render
+    // as "420%" with the bar overflowing its track.
+    if (typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > 1) {
+      throw new TypeError(`scores.${code}`);
+    }
+    scores[code] = score;
+  }
+  // A row keyed by a retired scale (or a wider one) is a row from another
+  // contract — dropped, never rendered as if it were four-class.
+  const stray = strayScaleKeys(Object.keys(raw));
+  if (stray.length > 0) {
+    throw new TypeError(`scores has keys outside the scale: ${stray.join(", ")}`);
   }
   return scores;
 }
