@@ -10,7 +10,7 @@ import { DamageStrip } from "@/components/ui/DamageStrip";
 import { DAMAGE_CLASSES, type DamageClass } from "@/lib/damage-classes";
 
 const CYCLE_MS = 2500;
-// Let the strip's NC -> GC light-up finish before the captions start.
+// Let the strip's ND -> TD light-up finish before the captions start.
 const ENTRANCE_MS = 1100;
 
 export function Hero() {

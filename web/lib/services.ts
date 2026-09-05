@@ -1,9 +1,10 @@
-// What each tier is allowed to do next — Raed's branching rules, in one place.
+// What each damage class is allowed to do next — the branching rules, in one
+// place.
 //
-//   NC  restoration is pointless (nothing to rebuild) -> 3D is the primary action
-//   PC  the full pipeline, pre-selected: restore, then reconstruct
-//   GC  restoration allowed but WARNED: at total collapse the output is a
-//       conceptual reconstruction, not a repair plan
+//   ND        little to repair, so 3D is the primary action
+//   SMD, HVD  the full pipeline, pre-selected: restore, then reconstruct
+//   TD        restoration allowed but WARNED: at total collapse the output is a
+//             conceptual reconstruction, not a repair plan
 import type { DamageCode } from "./damage-classes";
 
 export interface ServicePolicy {

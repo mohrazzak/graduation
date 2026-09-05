@@ -12,7 +12,7 @@ export interface ConfirmationNoticeProps {
 export function ConfirmationNotice({ nextPath }: ConfirmationNoticeProps) {
   const t = useTranslations("auth.register");
   return (
-    // Hazard, not alert: #FF3B30 is reserved for level-4/5 surfaces (spec section 8).
+    // Hazard, not alert: #FF3B30 is reserved for TD surfaces (spec section 8).
     <div
       role="status"
       className="flex flex-col items-start gap-3 rounded border border-hazard/40 bg-hazard/10 px-3 py-3"

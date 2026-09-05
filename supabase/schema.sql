@@ -2,9 +2,10 @@
 -- HOW TO RUN: paste this whole file into the Supabase dashboard SQL editor
 -- (SQL Editor -> New query -> Run). One-time setup per project.
 --
--- This is the CURRENT schema (versioned legacy PHI-3 and active Raed-4). A fresh project needs only
--- this file — migrations/ applies only to a database still on the old
--- six-level shape.
+-- This is the CURRENT schema: it creates the four-class Raed-4 shape, and keeps
+-- the retired PHI-3 columns nullable so older rows still read back. A fresh
+-- project needs ONLY this file — migrations/ applies to a database still on an
+-- older shape (six-level first, then the three-tier NC/PC/GC one).
 --
 -- BEFORE/AFTER RUNNING, also in the dashboard:
 --   1. Storage -> create a PRIVATE bucket named exactly "analysis-images"
@@ -13,22 +14,30 @@
 --      so demo registration works instantly.
 
 -- Analyses table
--- Damage scale: the three PHI-Net Task 5 collapse tiers.
---   NC = non-collapse (intact OR minor damage, structure stands)
---   PC = partial collapse
---   GC = global collapse
+-- ACTIVE damage scale: the four Raed detector classes, least to most severe.
+-- Mirrors web/lib/damage-classes.ts and api/predict/damage_classes.py — those
+-- three lists must always agree.
+--   ND  = no damage
+--   SMD = slight / moderate damage
+--   HVD = heavy / very heavy damage
+--   TD  = total damage
+-- Rows on this scale carry scale_version 'raed4' and fill class_code + scores.
 create table public.analyses (
   id             uuid primary key default gen_random_uuid(),
   user_id        uuid not null references auth.users(id) on delete cascade,
   image_path     text not null,          -- storage path of uploaded photo
   heatmap_path   text,                   -- storage path of heatmap (nullable)
   scale_version  text not null default 'raed4' check (scale_version in ('phi3', 'raed4')),
+  -- RETIRED phi3 columns, null on every raed4 row. Kept only so rows written
+  -- by the old three-tier scale (NC = non-collapse, PC = partial collapse,
+  -- GC = global collapse) still read back. Nothing writes them today.
   tier           text check (tier in ('NC', 'PC', 'GC')),
   confidence     real not null check (confidence between 0 and 1),
-  probabilities  jsonb,
-  damage_percent real check (damage_percent between 0 and 100),
+  probabilities  jsonb,                  -- RETIRED: tier-keyed {"NC":f,"PC":f,"GC":f}
+  damage_percent real check (damage_percent between 0 and 100),  -- RETIRED
+  -- ACTIVE four-class payload (see the scale documented above the table).
   class_code     text check (class_code in ('ND', 'SMD', 'HVD', 'TD')),
-  scores         jsonb,
+  scores         jsonb,                  -- class-keyed {"ND":f,"SMD":f,"HVD":f,"TD":f}
   detections     jsonb,
   model_id       text not null,          -- which classifier produced the verdict
   repaired_path  text,                   -- restore pipeline output (nullable)

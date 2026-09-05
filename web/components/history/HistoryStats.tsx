@@ -1,6 +1,6 @@
 "use client";
 // Command-center strip above the history grid: total, average confidence,
-// and a three-bar tier histogram in ramp colors.
+// and a four-bar class histogram in ramp colors (one bar per DAMAGE_CLASSES entry).
 import { motion, useReducedMotion } from "framer-motion";
 import { useFormatter, useTranslations } from "next-intl";
 import { CornerTicks } from "@/components/ui/CornerTicks";

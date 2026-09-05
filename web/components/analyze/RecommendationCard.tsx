@@ -1,5 +1,5 @@
-// The rehabilitation recommendation for a tier: what to do about this building.
-// GC is the only tier that gets the alert treatment and the hazard stripe.
+// The rehabilitation recommendation for a damage class: what to do about this
+// building. TD is the only class that gets the alert treatment and the stripe.
 import { useTranslations } from "next-intl";
 import { CornerTicks } from "@/components/ui/CornerTicks";
 import { getDamageClass, type DamageCode } from "@/lib/damage-classes";

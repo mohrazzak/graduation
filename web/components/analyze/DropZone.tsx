@@ -68,7 +68,7 @@ export function DropZone({ onFile, disabled = false }: DropZoneProps) {
       {rejection !== null ? (
         <p
           role="alert"
-          // Hazard, not alert: #FF3B30 is reserved for level-4/5 surfaces (spec section 8).
+          // Hazard, not alert: #FF3B30 is reserved for TD surfaces (spec section 8).
           className="mt-3 rounded border border-hazard/40 bg-hazard/10 px-3 py-2 text-xs text-hazard"
         >
           {t(`errors.${rejection}`)}

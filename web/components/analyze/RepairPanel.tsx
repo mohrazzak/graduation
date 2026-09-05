@@ -80,7 +80,12 @@ export function RepairPanel({ file, classCode, sourceSrc, analysisId, analysisSt
 
         {maskReady ? (
           <div className="mt-4 space-y-4">
-            <MaskEditor ref={editorRef} sourceSrc={sourceSrc} maskSrc={artifactUrl(preparation.jobId!, "mask")} onSelectionChange={setHasSelection} />
+            {/* The panel spans the page but its raster media does not: the demo
+                samples are 224px, so filling the full container would render
+                them as blur rather than as detail. */}
+            <div className="max-w-3xl">
+              <MaskEditor ref={editorRef} sourceSrc={sourceSrc} maskSrc={artifactUrl(preparation.jobId!, "mask")} onSelectionChange={setHasSelection} />
+            </div>
             {!hasSelection ? <p role="alert" className="text-sm text-hazard">{t("repair.mask.empty")}</p> : null}
             <div className="flex flex-wrap gap-3">
               <Button disabled={!hasSelection || repair.running} onClick={() => void run()}>{t("repair.runSelection")}</Button>
@@ -100,7 +105,9 @@ export function RepairPanel({ file, classCode, sourceSrc, analysisId, analysisSt
             <StageProgress stageKeys={REPAIR_STAGES} current={repair.state.stage} status={repair.state.status} timing={repair.state.timing} service="repair" indefiniteKey="generating" />
             {repaired && repair.jobId && sourceSrc ? (
               <>
-                <BeforeAfter baseSrc={sourceSrc} overlaySrc={artifactUrl(repair.jobId, "repaired")} overlayAlt={t("repair.repairedAlt")} />
+                <div className="max-w-3xl">
+                  <BeforeAfter baseSrc={sourceSrc} overlaySrc={artifactUrl(repair.jobId, "repaired")} overlayAlt={t("repair.repairedAlt")} />
+                </div>
                 <ArtifactPersistenceNote status={artifactSaveStatus} onRetry={retryArtifactSave} />
               </>
             ) : null}

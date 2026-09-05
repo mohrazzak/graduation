@@ -25,6 +25,6 @@ pre-generated model — they show the honest out-of-credit state instead.
 ## 2D restoration — MISSING
 
 Not generated yet: the Gemini free-tier image quota has been exhausted on every
-attempt. `scripts/make_fixtures.py` writes `sample-<TIER>-repaired.png` here as
+attempt. `scripts/make_fixtures.py` writes `sample-<CODE>-repaired.png` here as
 soon as the quota resets, and skips cleanly (never writes a placeholder) while
 it is spent.

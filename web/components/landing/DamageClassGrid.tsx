@@ -1,11 +1,11 @@
 // Landing scale section: all four damage classes as ticked cards, driven by
-// DAMAGE_CLASSES.
+// DAMAGE_CLASSES. One photo per class, named by class code — the map that used
+// to fan four classes onto three retired-tier photos showed SMD and HVD the
+// same image, which read as a three-level scale.
 import { getLocale, getTranslations } from "next-intl/server";
 import Image from "next/image";
 import { Card } from "@/components/ui/Card";
 import { DAMAGE_CLASSES } from "@/lib/damage-classes";
-
-const CLASS_IMAGE = { ND: "NC", SMD: "PC", HVD: "PC", TD: "GC" } as const;
 
 export async function DamageClassGrid() {
   const locale = await getLocale();
@@ -29,7 +29,7 @@ export async function DamageClassGrid() {
             <Card ticks className="h-full">
               <div className="relative mb-4 aspect-3/2 overflow-hidden rounded border border-line">
                 <Image
-                  src={`/landing/tier-${CLASS_IMAGE[tier.code]}.jpg`}
+                  src={`/landing/tier-${tier.code}.jpg`}
                   alt={t("landing.levelPhotoAlt", { name: t(`damageClasses.${tier.key}.name`) })}
                   fill
                   sizes="(min-width: 1024px) 360px, (min-width: 640px) 50vw, 100vw"

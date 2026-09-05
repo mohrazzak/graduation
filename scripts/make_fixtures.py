@@ -29,7 +29,14 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SAMPLES = ROOT / "web" / "public" / "samples"
 FIXTURES = ROOT / "web" / "public" / "fixtures"
-TIERS = ("NC", "PC", "GC")
+
+# Imported, never retyped: the fixture filenames are keyed by class code, so a
+# local copy of the list would silently stop matching web/public/samples the
+# moment the scale changes. This is the same four-class order the API serves.
+sys.path.insert(0, str(ROOT / "api"))
+from predict.damage_classes import DAMAGE_CLASS_ORDER  # noqa: E402
+
+CODES = DAMAGE_CLASS_ORDER
 
 API = "http://localhost:8000"
 GEMINI_MODEL = "gemini-2.5-flash-image"
@@ -58,9 +65,9 @@ def env(name: str) -> str:
     return ""
 
 
-def make_model3d(tier: str) -> str:
+def make_model3d(code: str) -> str:
     """Generate the 3D fixture for one sample via the running API."""
-    photo = SAMPLES / f"sample-{tier}.jpg"
+    photo = SAMPLES / f"sample-{code}.jpg"
     boundary = "----fixtures"
     body = (
         f"--{boundary}\r\n"
@@ -84,20 +91,20 @@ def make_model3d(tier: str) -> str:
                 f"{API}/jobs/{job_id}/artifact/model", timeout=300
             ) as response:
                 glb = response.read()
-            (FIXTURES / f"sample-{tier}.glb").write_bytes(glb)
-            return f"wrote sample-{tier}.glb ({len(glb) / 1e6:.2f} MB)"
+            (FIXTURES / f"sample-{code}.glb").write_bytes(glb)
+            return f"wrote sample-{code}.glb ({len(glb) / 1e6:.2f} MB)"
         if state["status"] == "error":
             return f"SKIPPED — service reported {state['detail']}"
         time.sleep(5)
     return "SKIPPED — timed out"
 
 
-def make_repair(tier: str) -> str:
+def make_repair(code: str) -> str:
     """Generate the restoration fixture for one sample via Gemini."""
     key = env("GEMINI_API_KEY")
     if not key:
         return "SKIPPED — no GEMINI_API_KEY"
-    photo = SAMPLES / f"sample-{tier}.jpg"
+    photo = SAMPLES / f"sample-{code}.jpg"
     payload = {
         "contents": [
             {
@@ -131,8 +138,8 @@ def make_repair(tier: str) -> str:
         inline = part.get("inlineData") or part.get("inline_data")
         if inline and inline.get("data"):
             image = base64.b64decode(inline["data"])
-            (FIXTURES / f"sample-{tier}-repaired.png").write_bytes(image)
-            return f"wrote sample-{tier}-repaired.png ({len(image) / 1e6:.2f} MB)"
+            (FIXTURES / f"sample-{code}-repaired.png").write_bytes(image)
+            return f"wrote sample-{code}-repaired.png ({len(image) / 1e6:.2f} MB)"
     return "SKIPPED — model returned no image"
 
 
@@ -144,22 +151,22 @@ def main() -> int:
 
     FIXTURES.mkdir(parents=True, exist_ok=True)
     jobs: list[tuple[str, str, pathlib.Path]] = []
-    for tier in TIERS:
+    for code in CODES:
         if args.only != "repair":
-            jobs.append(("3d", tier, FIXTURES / f"sample-{tier}.glb"))
+            jobs.append(("3d", code, FIXTURES / f"sample-{code}.glb"))
         if args.only != "3d":
-            jobs.append(("repair", tier, FIXTURES / f"sample-{tier}-repaired.png"))
+            jobs.append(("repair", code, FIXTURES / f"sample-{code}-repaired.png"))
 
-    for kind, tier, target in jobs:
+    for kind, code, target in jobs:
         if target.exists() and not args.force:
-            print(f"  {kind:6} {tier}: present, skipping")
+            print(f"  {kind:6} {code}: present, skipping")
             continue
-        print(f"  {kind:6} {tier}: generating...", flush=True)
+        print(f"  {kind:6} {code}: generating...", flush=True)
         try:
-            result = make_model3d(tier) if kind == "3d" else make_repair(tier)
+            result = make_model3d(code) if kind == "3d" else make_repair(code)
         except Exception as exc:  # noqa: BLE001 - one failure must not stop the rest
             result = f"FAILED — {type(exc).__name__}: {exc}"
-        print(f"  {kind:6} {tier}: {result}")
+        print(f"  {kind:6} {code}: {result}")
     return 0
 
 

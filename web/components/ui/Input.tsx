@@ -47,7 +47,7 @@ export function Input({
       autoFocus={autoFocus}
       aria-invalid={error ? true : undefined}
       aria-describedby={error ? errorId : undefined}
-      // Hazard, not alert: #FF3B30 is reserved for level-4/5 surfaces (spec section 8).
+      // Hazard, not alert: #FF3B30 is reserved for TD surfaces (spec section 8).
       // pe-10 clears the trailing slot; w-full because the relative wrapper is
       // a plain block, not the stretching flex column.
       className={`h-10 rounded border bg-surface px-3 text-sm text-text placeholder:text-muted ${

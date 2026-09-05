@@ -1,9 +1,9 @@
 "use client";
-// What to do next with this building, gated by tier.
+// What to do next with this building, gated by damage class.
 //
-//   NC  restoration is hidden with a reason (nothing to rebuild) and 3D leads
-//   PC  the full pipeline, restoration already open
-//   GC  restoration offered but warned inside the panel
+//   ND        restoration opens, but 3D leads — there is little to repair
+//   SMD, HVD  the full pipeline, restoration already open and leading
+//   TD        restoration offered but collapsed and warned inside the panel
 //
 // Nothing here exists before a verdict: restoration is gated on classification,
 // which the API enforces independently.
@@ -38,7 +38,7 @@ export function ServiceRail({
   const [restoreOpen, setRestoreOpen] = useState(policy.restorePreselected);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <h2 className="font-display text-sm font-bold uppercase tracking-wider text-muted">
         {t("services.title")}
       </h2>

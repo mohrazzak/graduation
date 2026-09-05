@@ -112,7 +112,7 @@ export function HistoryClient() {
         </div>
       ) : null}
       {state === "error" ? (
-        // Hazard, not alert: #FF3B30 is reserved for level-4/5 surfaces (spec section 8).
+        // Hazard, not alert: #FF3B30 is reserved for TD surfaces (spec section 8).
         <div role="alert" className="rounded border border-hazard/40 bg-hazard/10 p-5">
           <p className="text-sm text-hazard">{t(`history.${loadErrorKey}`)}</p>
           <Button variant="primary" className="mt-4" onClick={retry}>

@@ -79,7 +79,7 @@ export function AnalysisModal({
 
   return (
     <ModalShell labelledBy={TITLE_ID} onClose={onClose}>
-      {/* GC banner treatment, mirroring ResultPanel — the only alert surfaces. */}
+      {/* TD banner treatment, mirroring ResultPanel — the only alert surfaces. */}
       {alert ? (
         <span aria-hidden="true" className="hazard-stripe absolute inset-x-0 top-0" />
       ) : null}
@@ -186,7 +186,7 @@ export function AnalysisModal({
         )}
       </div>
       {deleteFailed ? (
-        // Hazard, not alert: #FF3B30 is reserved for GC surfaces (spec section 8).
+        // Hazard, not alert: #FF3B30 is reserved for TD surfaces (spec section 8).
         <p role="alert" className="mt-3 text-sm text-hazard">
           {t("history.deleteFailed")}
         </p>

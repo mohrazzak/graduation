@@ -84,7 +84,7 @@ export async function saveAnalysis(input: {
     return { data: null, error: "save_failed" };
   }
 
-  // Unreachable in practice (the DB check constraint enforces NC/PC/GC),
+  // Unreachable in practice (the DB check constraint enforces ND/SMD/HVD/TD),
   // but mapping through toAnalysis keeps the narrowing in one place.
   const analysis = toAnalysis(row);
   if (analysis === null) {

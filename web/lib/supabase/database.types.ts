@@ -18,13 +18,12 @@ type AnalysesRow = {
   image_path: string;
   heatmap_path: string | null;
   scale_version: string;
-  // 'NC' | 'PC' | 'GC', enforced by a check constraint. Typed as string here
-  // and narrowed in queries.ts, so a hand-edited row is rejected rather than
-  // trusted into the domain type.
+  // RETIRED phi3 column, null on every raed4 row: 'NC' | 'PC' | 'GC', enforced
+  // by a check constraint. Kept so old rows still read back.
   tier: string | null;
   confidence: number;
-  // jsonb: a tier-keyed object {"NC":f,"PC":f,"GC":f}. Untyped on purpose —
-  // queries.ts validates it.
+  // RETIRED phi3 column: a tier-keyed object {"NC":f,"PC":f,"GC":f}. The active
+  // scale writes `scores` instead. Untyped on purpose — queries.ts validates it.
   probabilities: Json | null;
   damage_percent: number | null;
   class_code: string | null;

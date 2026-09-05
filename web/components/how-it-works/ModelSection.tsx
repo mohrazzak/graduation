@@ -1,5 +1,5 @@
-// How-it-works: model architecture placeholder — transfer-learning CNN narrative,
-// the deliberately deferred framework choice, and today's mock-endpoint note.
+// How-it-works: the one detector that ships — what YOLOv8s emits per region, why
+// the image-level verdict is derived from those regions, and the mock fallback.
 import { useTranslations } from "next-intl";
 import { PlaceholderTag } from "./PlaceholderTag";
 

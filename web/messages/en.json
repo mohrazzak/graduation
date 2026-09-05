@@ -138,11 +138,6 @@
       "notConfigured": "The result was not saved — Supabase is not configured yet. Add the project URL and anon key to web/.env.local, then retry.",
       "notAuthenticated": "The result was not saved — your session has ended. Log in again, then retry."
     },
-    "damagePercent": {
-      "label": "Estimated damage",
-      "aria": "Estimated damage: {value}",
-      "note": "Weighted estimate across the three classes — not a site survey."
-    },
     "recommendation": {
       "label": "Recommendation"
     },
@@ -200,15 +195,15 @@
       "title": "Dataset and labeling",
       "placeholderTag": "Counts not measured here",
       "sourcesTitle": "Data sources",
-      "sourcesBody": "The detector was trained on a four-class annotated set of post-hazard building photographs, each image carrying bounding boxes rather than a single whole-image label. Training ran for 150 epochs at 800px. The labelled set is held by the model author and its per-class composition has not been measured on this machine, so no image counts are published here — an invented breakdown would be worse than none. The earlier PHI-Net Task 5 figures that stood here described the retired three-class classifiers, not this model.",
+      "sourcesBody": "The detector was trained on a four-class annotated set of post-hazard building photographs, each image carrying bounding boxes rather than a single whole-image label. Training ran for 150 epochs at 800px. The labelled set is held by the model author and its per-class composition has not been measured on this machine, so no image counts are published here — an invented breakdown would be worse than none. The earlier PHI-Net Task 5 figures that stood here described the retired classifiers, not this model.",
       "labelingTitle": "Labeling protocol",
       "labelingBody": "Every building in an image is boxed and graded independently, which is why one photograph can contain regions of different severity. The four grades map onto this scale in order: no damage, slight/moderate, heavy/very heavy, total. Because each region is graded on its own, the whole-image verdict is not a label the model produces — it is the most severe region found, chosen deliberately so an assessment errs toward caution rather than reassurance."
     },
     "model": {
       "title": "Model architecture",
       "placeholderTag": "Trained",
-      "body": "Two classifiers are trained and selectable at prediction time. The first is ResNet50 with ImageNet transfer learning, taking 224×224 input with Caffe-style preprocessing (BGR channel order, ImageNet mean subtraction, no standard-deviation division). The second is a YOLO11 nano classifier trained on the same three-class split for comparison.",
-      "frameworkNote": "The two models run on different frameworks — TensorFlow and PyTorch — behind one predict() interface, so the app never knows which is active. A third slot is registered and waiting for a further model.",
+      "body": "One detector ships. It is a YOLOv8s network fine-tuned to find every building in a photograph and grade each one against the four destruction classes, trained for 150 epochs at 800px on PyTorch through Ultralytics. Its output is a set of boxes — one class code and one confidence per detected region — not a single label for the whole image.",
+      "frameworkNote": "That is why the verdict on the analyze page is derived rather than predicted: the most severe retained detection wins, and within each class the highest detector confidence is reported. The aggregation is deliberately conservative — one heavily damaged wing decides the assessment for the whole photograph — and it is also why a photo with no retained detection is reported as no detection, never quietly as no damage.",
       "mockNote": "A deterministic mock backend remains available for environments without the model weights installed, so the demo still runs anywhere. It is labeled as the mock in the model picker and never impersonates a trained model."
     },
     "metrics": {
@@ -226,8 +221,8 @@
     },
     "gradcam": {
       "title": "Explainability: where the model looked",
-      "body": "A Grad-CAM heatmap highlights the pixels that most influenced a verdict, turning a bare class label into something an engineer can check. It is not implemented yet: the trained classifiers currently return no heatmap, so the analyze page shows none rather than displaying an explanation no model produced.",
-      "tryNote": "It is a planned addition on the ResNet backend. Until it lands, the <link>analyze page</link> reports the class probabilities alone."
+      "body": "A Grad-CAM heatmap highlights the pixels that most influenced a verdict, turning a bare class label into something an engineer can check. It is not implemented here: the model returns no heatmap, so the analyze page shows none rather than displaying an explanation no model produced.",
+      "tryNote": "The technique itself has to change first. Grad-CAM was built for whole-image classifiers, while a detector already answers where by drawing a box, so explaining why a region earned its grade needs a different method. Until one lands, the <link>analyze page</link> reports the detector confidences alone."
     }
   },
   "auth": {

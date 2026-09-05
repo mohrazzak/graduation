@@ -284,14 +284,14 @@ alphabetical-index bug unwriteable.
 
 - Palette tokens (Tailwind named colors): `bg #0C0C0E`, `surface #161619`,
   `line #2A2A2F`, `text #EDEDEF`, `muted #8B8B93`, `hazard #FFB000` (accent,
-  CTAs, focus rings), `alert #FF3B30` (levels 4–5 ONLY).
+  CTAs, focus rings), `alert #FF3B30` (the TD class ONLY).
 - Fonts: Archivo (display, uppercase), Inter (body), JetBrains Mono (ALL
   numbers/percentages/timestamps/tier codes), Cairo (ar).
 - Signature motif: **THE SCALE** — 4-segment strip (`components/ui/DamageStrip`)
   reused in navbar logo, landing hero (animated), analyze result, history cards.
 - Restraint: border radius ≤ 4px, hairline `line` borders, corner tick marks on
   key cards, film-grain ~3% overlay, ONE hazard-stripe (45°, 8px) used only on
-  primary CTA top border + the GC banner. No glassmorphism, no gradients.
+  primary CTA top border + the TD banner. No glassmorphism, no gradients.
 - Motion: analyze flow is the one orchestrated moment (scan line 1.2s loop,
   digit count-up, bars stagger 60ms); everything else 150–200ms fades only.
 - Copy voice: technical inspection register, short ("HOW BADLY IS IT DAMAGED?").

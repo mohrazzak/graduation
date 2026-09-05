@@ -71,7 +71,7 @@ body::before {
 }
 
 /* The single hazard-stripe motif (spec section 8): apply to an empty element to
-   render a 4px tape strip across the top of the primary CTA / level-4-5 banner.
+   render a 4px tape strip across the top of the primary CTA / TD banner.
    Black gaps (not transparent) keep the tape readable on the amber CTA itself. */
 @utility hazard-stripe {
   display: block;

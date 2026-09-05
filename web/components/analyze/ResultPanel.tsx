@@ -1,13 +1,12 @@
 "use client";
-// The verdict: estimated damage percentage, tier name, THE SCALE highlighted,
-// confidence, the probability bars, and which model produced it. GC gets the
-// hazard banner.
+// The verdict: class name, THE SCALE highlighted, confidence, the per-class
+// detector bars, and which model produced it. TD gets the hazard banner.
 import { type ReactNode } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { useModelName } from "@/lib/model-names";
 import { DamageStrip } from "@/components/ui/DamageStrip";
 import { CornerTicks } from "@/components/ui/CornerTicks";
-import { getDamageClass, severityOf } from "@/lib/damage-classes";
+import { DAMAGE_CLASSES, getDamageClass, severityOf } from "@/lib/damage-classes";
 import type { Prediction } from "@/lib/types";
 import { ConfidenceBars } from "./ConfidenceBars";
 
@@ -30,7 +29,7 @@ export function ResultPanel({ prediction, children }: ResultPanelProps) {
         alert ? "border-alert/50" : "border-line"
       }`}
     >
-      {/* The GC banner: the only hazard-stripe outside the primary CTA. */}
+      {/* The TD banner: the only hazard-stripe outside the primary CTA. */}
       {alert ? (
         <span aria-hidden="true" className="hazard-stripe absolute inset-x-0 top-0" />
       ) : null}
@@ -41,8 +40,10 @@ export function ResultPanel({ prediction, children }: ResultPanelProps) {
             <span className="block text-xs uppercase tracking-wider text-muted">
               {t("analyze.severity")}
             </span>
+            {/* Denominator comes from THE SCALE, so the one number on screen
+                that states how many levels exist cannot drift from it. */}
             <span className="font-mono text-3xl font-semibold">
-              {severityOf(prediction.class_code)}/4
+              {severityOf(prediction.class_code)}/{DAMAGE_CLASSES.length}
             </span>
           </div>
           <div className="text-end">

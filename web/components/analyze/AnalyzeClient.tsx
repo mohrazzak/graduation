@@ -149,16 +149,6 @@ export function AnalyzeClient() {
         {phase === "done" && prediction !== null ? (
           <RecommendationCard classCode={prediction.class_code} />
         ) : null}
-        {/* What to do next with this building — gated by the tier. */}
-        {phase === "done" && prediction !== null && file !== null ? (
-          <ServiceRail
-            file={file}
-            classCode={prediction.class_code}
-            sourceSrc={previewUrl}
-            analysisId={analysisId}
-            analysisStatus={saveStatus}
-          />
-        ) : null}
         {phase === "done" && saveError !== null ? (
           <SaveFailedNote
             errorCode={saveError}
@@ -169,6 +159,21 @@ export function AnalyzeClient() {
           <AnalyzeError kind={errorKind} onRetry={() => void submit()} onReset={reset} />
         ) : null}
       </div>
+
+      {/* What to do next with this building — gated by the tier. Spans the
+          whole grid: the mask canvas and the two 3D viewers ARE the payload of
+          this page, and half a column starves them. */}
+      {phase === "done" && prediction !== null && file !== null ? (
+        <div className="lg:col-span-2">
+          <ServiceRail
+            file={file}
+            classCode={prediction.class_code}
+            sourceSrc={previewUrl}
+            analysisId={analysisId}
+            analysisStatus={saveStatus}
+          />
+        </div>
+      ) : null}
 
       {saveStatus === "saved" ? (
         <Toast message={t("analyze.savedToast")} href="/history"
