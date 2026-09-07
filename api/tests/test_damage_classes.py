@@ -1,4 +1,4 @@
-"""Four-class detector aggregation stays severity ordered and truthful."""
+"""Four-class detector aggregation follows detector confidence and stays truthful."""
 
 import pytest
 
@@ -10,7 +10,7 @@ from predict.damage_classes import (
 )
 
 
-def test_most_severe_detection_wins_over_higher_confidence() -> None:
+def test_highest_confidence_detection_wins_over_more_severe() -> None:
     prediction = aggregate_detections(
         [
             Detection("SMD", 0.91, Box(0.1, 0.1, 0.4, 0.4)),
@@ -18,9 +18,21 @@ def test_most_severe_detection_wins_over_higher_confidence() -> None:
         ]
     )
 
-    assert prediction.class_code == "TD"
-    assert prediction.confidence == pytest.approx(0.62)
+    assert prediction.class_code == "SMD"
+    assert prediction.confidence == pytest.approx(0.91)
     assert prediction.scores == {"ND": 0.0, "SMD": 0.91, "HVD": 0.0, "TD": 0.62}
+
+
+def test_equal_confidence_resolves_to_the_more_severe_class() -> None:
+    prediction = aggregate_detections(
+        [
+            Detection("HVD", 0.6, Box(0.0, 0.0, 0.5, 0.5)),
+            Detection("TD", 0.6, Box(0.5, 0.5, 1.0, 1.0)),
+        ]
+    )
+
+    assert prediction.class_code == "TD"
+    assert prediction.confidence == pytest.approx(0.6)
 
 
 def test_highest_confidence_wins_within_overall_class() -> None:

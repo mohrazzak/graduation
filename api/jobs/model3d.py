@@ -18,10 +18,13 @@ import time
 import urllib.error
 import urllib.request
 
+from jobs import subject
+from predict.damage_classes import Box
+
 API_ROOT = "https://api.tripo3d.ai/v2/openapi"
 MODEL_VERSION = "v2.5-20250123"
 
-STAGE_KEYS = ("uploading", "reconstructing", "downloading")
+STAGE_KEYS = ("isolating", "uploading", "reconstructing", "downloading")
 
 # Tripo's own queue can take minutes; poll gently and give up rather than hang.
 _POLL_SECONDS = 3
@@ -177,12 +180,19 @@ def _get_json(url: str, key: str) -> dict:
         return json.load(response)
 
 
-def generate_glb(image_bytes: bytes, on_stage) -> bytes:  # noqa: ANN001 - callback
+def generate_glb(
+    image_bytes: bytes,
+    on_stage,  # noqa: ANN001 - callback
+    boxes: list[Box] | None = None,
+    selection_png: bytes | None = None,
+) -> bytes:
     """Reconstruct a textured GLB from one image.
 
     Args:
         image_bytes: the source photo (original upload, or a repaired render).
         on_stage: called with (stage_key, index) as each stage is reached.
+        boxes: detector boxes bounding the building, in the source frame.
+        selection_png: an optional user-drawn mask overriding the auto matte.
 
     Raises:
         Model3DUnavailable: no key, or the remote task failed / timed out.
@@ -197,14 +207,24 @@ def generate_glb(image_bytes: bytes, on_stage) -> bytes:  # noqa: ANN001 - callb
     if balance is not None and balance <= 0:
         raise Model3DUnavailable("quota_exceeded")
 
+    # Isolation happens before the upload, not after: Tripo chooses its own
+    # subject and v2.5 has no parameter to override that choice, so the cut-out
+    # is the only way to say "reconstruct the building, not the lamp post".
+    on_stage("isolating", 1)
     try:
-        on_stage("uploading", 1)
-        uploaded = _post_multipart(f"{API_ROOT}/upload", key, image_bytes)
+        subject_bytes = subject.prepare_subject(image_bytes, boxes, selection_png)
+    except subject.SubjectPreparationError:
+        # A photo we cannot cut out is still a photo Tripo can try to read.
+        subject_bytes = image_bytes
+
+    try:
+        on_stage("uploading", 2)
+        uploaded = _post_multipart(f"{API_ROOT}/upload", key, subject_bytes)
         if uploaded.get("code") != 0:
             raise Model3DUnavailable("upload_failed")
         image_token = uploaded["data"]["image_token"]
 
-        on_stage("reconstructing", 2)
+        on_stage("reconstructing", 3)
         # The type is set explicitly rather than inferred from a filename: on the
         # from_job path the input is a generated PNG with no name at all.
         task = _post_json(
@@ -237,7 +257,7 @@ def generate_glb(image_bytes: bytes, on_stage) -> bytes:  # noqa: ANN001 - callb
         if model_url is None:
             raise Model3DUnavailable("timed_out")
 
-        on_stage("downloading", 3)
+        on_stage("downloading", 4)
         return _download_glb(model_url)
     except urllib.error.HTTPError as exc:
         raise Model3DUnavailable(
@@ -249,13 +269,21 @@ def generate_glb(image_bytes: bytes, on_stage) -> bytes:  # noqa: ANN001 - callb
         raise Model3DUnavailable("backend_error") from exc
 
 
-def run(job_id: str, image_bytes: bytes) -> None:
+def run(
+    job_id: str,
+    image_bytes: bytes,
+    boxes: list[Box] | None = None,
+    selection_png: bytes | None = None,
+) -> None:
     """Execute 3D reconstruction on a worker thread, recording stages."""
     from jobs.store import store
 
     try:
         glb = generate_glb(
-            image_bytes, lambda key, index: store.start_stage(job_id, key, index)
+            image_bytes,
+            lambda key, index: store.start_stage(job_id, key, index),
+            boxes,
+            selection_png,
         )
         store.add_artifact(job_id, "model", glb, "model/gltf-binary")
         store.finish(job_id)

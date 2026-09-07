@@ -91,7 +91,7 @@ class DetectorClassifier(Protocol):
     accuracy: float | None
 
     def classify(self, image_bytes: bytes) -> Prediction:
-        """Detect damaged buildings and summarize the most severe class."""
+        """Detect damaged buildings and summarize the highest-confidence class."""
         ...
 
 
@@ -102,8 +102,9 @@ def validate_model_names(
 
     Each backend passes the exact label set its own checkpoint is known to
     carry. Accepting "any four classes" would let an unrelated run inherit this
-    domain's severity order, and under most-severe-wins aggregation a silent
-    mislabel becomes a confidently wrong verdict.
+    domain's codes, and because aggregation reports whichever class the detector
+    was most confident about, a silent mislabel becomes a confidently wrong
+    verdict rather than an obviously broken one.
     """
     normalized = {int(index): str(name) for index, name in names.items()}
     if normalized != dict(expected):
@@ -111,7 +112,20 @@ def validate_model_names(
 
 
 def aggregate_detections(detections: Sequence[Detection]) -> Prediction:
-    """Select the most severe observed class and maximum score per class."""
+    """Select the highest-confidence observed class and maximum score per class.
+
+    The verdict follows the detector's own strongest observation: the class
+    holding the single highest confidence anywhere in the frame wins, and that
+    same confidence is reported as the image-level score. Equal confidence
+    resolves to the more severe class, so a tie can never read as reassurance.
+
+    This replaced most-severe-wins on 2026-09-07 at the user's direction,
+    because a badge that disagreed with the tallest bar in the score panel read
+    as a contradiction. The trade-off is accepted and deliberate: a
+    low-confidence total-damage region beside a high-confidence intact facade
+    now reports the facade's class, so the per-region boxes are what carry the
+    severe observation.
+    """
     if not detections:
         raise NoDetectionError("no_detection")
 
@@ -122,7 +136,9 @@ def aggregate_detections(detections: Sequence[Detection]) -> Prediction:
         )
 
     present = {detection.class_code for detection in detections}
-    class_code = max(present, key=DAMAGE_CLASS_ORDER.index)
+    class_code = max(
+        present, key=lambda code: (scores[code], DAMAGE_CLASS_ORDER.index(code))
+    )
     return Prediction(
         class_code=class_code,
         confidence=scores[class_code],

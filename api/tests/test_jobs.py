@@ -321,7 +321,12 @@ def test_model3d_from_job_receives_the_exact_repaired_png_bytes(
     received: dict[str, bytes] = {}
     completed = threading.Event()
 
-    def capture_input(_job_id: str, image_bytes: bytes) -> None:
+    def capture_input(
+        _job_id: str,
+        image_bytes: bytes,
+        _boxes: object = None,
+        _selection: object = None,
+    ) -> None:
         received["image_bytes"] = image_bytes
         completed.set()
 

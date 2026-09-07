@@ -2,8 +2,9 @@
 
 This is the only real model the product serves. It is a YOLOv8s *detector*: it
 emits a class per detected region, not per image. The single image-level
-verdict is derived from those regions by `aggregate_detections` — most severe
-wins — and is never something the network itself predicts.
+verdict is derived from those regions by `aggregate_detections` — the class the
+detector was most confident about wins — and is never something the network
+itself predicts.
 """
 
 from __future__ import annotations
@@ -71,7 +72,7 @@ class RaedClassifier:
         validate_model_names(self._model.names)
 
     def classify(self, image_bytes: bytes) -> Prediction:
-        """Return normalized detector boxes and a most-severe image verdict."""
+        """Return normalized detector boxes and a highest-confidence verdict."""
         image = Image.open(BytesIO(image_bytes)).convert("RGB")
         result = self._model(
             image,

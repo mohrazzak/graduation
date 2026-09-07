@@ -139,6 +139,16 @@ def edges_png(image: Image.Image, mask: Image.Image) -> bytes:
     return _to_png(canny_edges(image, mask))
 
 
+def has_segmenter() -> bool:
+    """Whether the real semantic segmenter loaded.
+
+    Callers that need a silhouette (the 3D subject matte) must check this: the
+    classical fallback in `building_mask` is an edge-energy cue, which is a fine
+    seed for a human to edit but is NOT a building outline.
+    """
+    return _segmenter() is not None
+
+
 def has_canny() -> bool:
     """Whether real Canny is available, so the UI can label the stage honestly."""
     try:

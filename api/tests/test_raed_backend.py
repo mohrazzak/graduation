@@ -62,9 +62,12 @@ def test_adapter_returns_normalized_detector_contract(tmp_path) -> None:
 
     prediction = classifier.classify(_image_bytes())
 
-    assert prediction.class_code == "TD"
-    assert prediction.confidence == pytest.approx(0.62)
+    # SMD 0.91 outranks TD 0.62: the verdict follows detector confidence, and
+    # both boxes still survive as per-region evidence on the photo.
+    assert prediction.class_code == "SMD"
+    assert prediction.confidence == pytest.approx(0.91)
     assert prediction.detections[0].class_code == "SMD"
+    assert prediction.detections[1].class_code == "TD"
     assert prediction.detections[0].box.x1 == pytest.approx(0.1)
 
 

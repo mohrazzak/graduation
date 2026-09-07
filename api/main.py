@@ -3,6 +3,7 @@ restore-pipeline spec — GET /health, GET /models, POST /predict, and the
 polled job routes for restoration and 3D reconstruction."""
 
 import io
+import json
 import os
 import threading
 
@@ -13,7 +14,7 @@ from fastapi.responses import JSONResponse, Response
 from PIL import Image
 
 from jobs import mask as mask_job
-from jobs import model3d, repair
+from jobs import model3d, repair, subject
 from jobs.store import store as job_store
 from predict.damage_classes import DAMAGE_CLASS_ORDER, NoDetectionError
 from predict.registry import (
@@ -249,8 +250,16 @@ def create_app() -> FastAPI:
         request: Request,
         file: UploadFile | None = None,
         from_job: str | None = Form(None),
+        boxes: str | None = Form(None),
+        mask: UploadFile | None = None,
     ) -> dict[str, str]:
-        """Start a 3D reconstruction job, from an upload or a finished repair."""
+        """Start a 3D reconstruction job, from an upload or a finished repair.
+
+        `boxes` carries the detector's normalized regions so the building can be
+        cut out before upload; a repaired render shares the source frame, so the
+        same boxes apply on the `from_job` path. Both it and `mask` are optional
+        hints — a malformed one degrades the crop, it never fails the run.
+        """
         if from_job:
             data = repair.repaired_bytes(from_job)
             if data is None:
@@ -264,8 +273,21 @@ def create_app() -> FastAPI:
             raise HTTPException(
                 status_code=400, detail="Provide either a file or from_job."
             )
+
+        try:
+            detected = subject.parse_boxes(json.loads(boxes)) if boxes else []
+        except ValueError:
+            detected = []
+        selection_png = await mask.read() if mask is not None else None
+        if selection_png is not None and len(selection_png) > _MAX_UPLOAD_BYTES:
+            selection_png = None
+
         job = job_store.create("model3d", stage_total=len(model3d.STAGE_KEYS))
-        threading.Thread(target=model3d.run, args=(job.id, data), daemon=True).start()
+        threading.Thread(
+            target=model3d.run,
+            args=(job.id, data, detected, selection_png),
+            daemon=True,
+        ).start()
         return {"job_id": job.id}
 
     @app.get("/jobs/{job_id}")
