@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { policyFor } from "@/lib/services";
 import type { DamageCode } from "@/lib/damage-classes";
+import type { DetectionBox } from "@/lib/types";
 import { ModelPanel } from "./ModelPanel";
 import { RepairPanel } from "./RepairPanel";
 import type { SaveStatus } from "./useSaveAnalysis";
@@ -18,6 +19,7 @@ import type { SaveStatus } from "./useSaveAnalysis";
 export interface ServiceRailProps {
   file: File;
   classCode: DamageCode;
+  boxes: readonly DetectionBox[];
   sourceSrc: string | null;
   /** Row generated artifacts attach to; null until the analysis has saved. */
   analysisId: string | null;
@@ -28,6 +30,7 @@ export interface ServiceRailProps {
 export function ServiceRail({
   file,
   classCode,
+  boxes,
   sourceSrc,
   analysisId,
   analysisStatus,
@@ -82,6 +85,7 @@ export function ServiceRail({
 
       <ModelPanel
         file={file}
+        boxes={boxes}
         analysisId={analysisId}
         analysisStatus={analysisStatus}
         repairedJobId={repairedJobId}

@@ -9,6 +9,7 @@ import { ApiError, predictDamage, type ApiErrorKind } from "@/lib/api";
 import { getDamageClass } from "@/lib/damage-classes";
 import type { Prediction } from "@/lib/types";
 import { AnalyzeError } from "./AnalyzeError";
+import { DetectionOverlay } from "./DetectionOverlay";
 import { DropZone } from "./DropZone";
 import { ImageWithHeatmap } from "./ImageWithHeatmap";
 import { ModelPicker } from "./ModelPicker";
@@ -119,6 +120,16 @@ export function AnalyzeClient() {
             heatmapVisible={false}
           >
             {phase === "analyzing" ? <ScanOverlay /> : null}
+            {/* The detector localizes, so the photo carries its evidence: a box
+                per detection plus the aggregated verdict. Only after the scan —
+                boxes over a still-running sweep would claim a result too early. */}
+            {phase === "done" && prediction !== null ? (
+              <DetectionOverlay
+                detections={prediction.detections}
+                classCode={prediction.class_code}
+                confidence={prediction.confidence}
+              />
+            ) : null}
           </ImageWithHeatmap>
         ) : (
           <DropZone onFile={selectFile} />
@@ -168,6 +179,7 @@ export function AnalyzeClient() {
           <ServiceRail
             file={file}
             classCode={prediction.class_code}
+            boxes={prediction.detections.map((detection) => detection.box)}
             sourceSrc={previewUrl}
             analysisId={analysisId}
             analysisStatus={saveStatus}

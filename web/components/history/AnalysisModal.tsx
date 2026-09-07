@@ -7,9 +7,11 @@ import { useFormatter, useTranslations } from "next-intl";
 import { ConfidenceBars } from "@/components/analyze/ConfidenceBars";
 import { RecommendationCard } from "@/components/analyze/RecommendationCard";
 import { HeatmapToggle } from "@/components/analyze/HeatmapToggle";
+import { DetectionOverlay } from "@/components/analyze/DetectionOverlay";
 import { ImageWithHeatmap } from "@/components/analyze/ImageWithHeatmap";
 import { Button } from "@/components/ui/Button";
 import { GeneratedOutputs, type ArtifactSlot } from "./GeneratedOutputs";
+import { ReportDocument } from "@/components/report/ReportDocument";
 import { DamageStrip } from "@/components/ui/DamageStrip";
 import { getDamageClass } from "@/lib/damage-classes";
 import type { Analysis } from "@/lib/types";
@@ -105,6 +107,13 @@ export function AnalysisModal({
           heatmapVisible={heatmapVisible}
           className="mt-4"
         >
+          {/* Same evidence the analyze page drew, from the persisted
+              detections, so a reopened entry is the whole original result. */}
+          <DetectionOverlay
+            detections={analysis.detections}
+            classCode={analysis.class_code}
+            confidence={analysis.confidence}
+          />
         </ImageWithHeatmap>
       ) : (
         <div
@@ -191,6 +200,17 @@ export function AnalysisModal({
           {t("history.deleteFailed")}
         </p>
       ) : null}
+      {/* Mounted, not conditional on the button: window.print() opens the print
+          dialog synchronously, so the page it prints has to already exist. It
+          portals to <body> and is display:none until then. The restored image
+          joins it only once its signed URL is ready — a loading or failed slot
+          prints the assessment alone rather than a broken frame. */}
+      <ReportDocument
+        analysis={analysis}
+        imageSrc={imageUrl}
+        restoredSrc={repaired.artifact.status === "ready" ? repaired.artifact.url : null}
+        modelName={modelLabel}
+      />
     </ModalShell>
   );
 }

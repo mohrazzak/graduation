@@ -6,12 +6,14 @@
 // model unless told these measure different things.
 import { useFormatter, useTranslations } from "next-intl";
 import { Card } from "@/components/ui/Card";
-import { PRIMARY_EVALUATION } from "@/lib/evaluation";
+import { TrainingCurves } from "./TrainingCurves";
+import { PRIMARY_EVALUATION, TRAINING_RUN, VALIDATION_LOSSES } from "@/lib/evaluation";
 
 export function MetricsSection() {
   const tm = useTranslations("howItWorks.metrics");
+  const tl = useTranslations("howItWorks.metrics.lossNames");
   const format = useFormatter();
-  const { architecture, epochs, imageSize, metrics } = PRIMARY_EVALUATION;
+  const { architecture, imageSize, metrics } = PRIMARY_EVALUATION;
   const headline = metrics.find((metric) => metric.headline) ?? metrics[0];
   const rest = metrics.filter((metric) => metric !== headline);
 
@@ -34,20 +36,20 @@ export function MetricsSection() {
             })}
           </span>
           <p className="text-xs text-muted">
-            {tm("architecture", { architecture, epochs, imageSize })}
+            {tm("architecture", {
+              architecture,
+              imageSize,
+              bestEpoch: TRAINING_RUN.bestEpoch,
+              epochs: TRAINING_RUN.epochs,
+            })}
           </p>
         </Card>
 
         <Card>
-          <h3 className="font-display text-base font-bold uppercase">
-            {tm("breakdownTitle")}
-          </h3>
+          <h3 className="font-display text-base font-bold uppercase">{tm("breakdownTitle")}</h3>
           <ul className="mt-4 divide-y divide-line border-y border-line">
             {rest.map((metric) => (
-              <li
-                key={metric.key}
-                className="flex items-baseline justify-between gap-4 py-3"
-              >
+              <li key={metric.key} className="flex items-baseline justify-between gap-4 py-3">
                 <span className="text-sm">{tm(`names.${metric.key}`)}</span>
                 <span className="font-mono text-sm">
                   {format.number(metric.value, {
@@ -58,10 +60,39 @@ export function MetricsSection() {
               </li>
             ))}
           </ul>
+
+          {/* Losses are absolute values, not percentages: kept in their own
+              group so no reader reads 1.50 as 150% of anything. */}
+          <h4 className="mt-6 font-mono text-xs uppercase tracking-wider text-muted">
+            {tm("lossesTitle")}
+          </h4>
+          <ul className="mt-3 divide-y divide-line border-y border-line">
+            {VALIDATION_LOSSES.map((loss) => (
+              <li key={loss.key} className="flex items-baseline justify-between gap-4 py-3">
+                <span className="text-sm">{tl(`${loss.key}.short`)}</span>
+                <span className="font-mono text-sm">
+                  {format.number(loss.value, {
+                    minimumFractionDigits: 3,
+                    maximumFractionDigits: 3,
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
         </Card>
       </div>
 
-      <p className="mt-6 max-w-2xl text-xs text-muted">{tm("detectionNote")}</p>
+      <TrainingCurves />
+
+      <p className="mt-8 max-w-2xl text-xs text-muted">{tm("detectionNote")}</p>
+      <p className="mt-3 max-w-2xl text-xs text-muted">
+        {tm("earlyStopNote", {
+          plannedEpochs: TRAINING_RUN.plannedEpochs,
+          epochs: TRAINING_RUN.epochs,
+          bestEpoch: TRAINING_RUN.bestEpoch,
+          patience: TRAINING_RUN.patience,
+        })}
+      </p>
     </section>
   );
 }

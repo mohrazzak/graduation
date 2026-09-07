@@ -8,19 +8,22 @@ import { ModelViewer } from "./ModelViewer";
 import { StageProgress } from "./StageProgress";
 import { useArtifactPersistence } from "./useArtifactPersistence";
 import { useJob } from "./useJob";
+import type { DetectionBox } from "@/lib/types";
 import type { SaveStatus } from "./useSaveAnalysis";
 
-const STAGES = ["uploading", "reconstructing", "downloading"] as const;
+const STAGES = ["isolating", "uploading", "reconstructing", "downloading"] as const;
 
 export function ModelRunCard({
   source,
   file,
+  boxes,
   repairedJobId,
   analysisId,
   analysisStatus,
 }: {
   source: "before" | "after";
   file: File;
+  boxes: readonly DetectionBox[];
   repairedJobId: string | null;
   analysisId: string | null;
   analysisStatus: SaveStatus;
@@ -39,8 +42,8 @@ export function ModelRunCard({
 
   const run = () => job.start(() =>
     source === "after" && repairedJobId
-      ? startModel3d({ fromJob: repairedJobId })
-      : startModel3d({ file }),
+      ? startModel3d({ fromJob: repairedJobId }, boxes)
+      : startModel3d({ file }, boxes),
   );
 
   return (

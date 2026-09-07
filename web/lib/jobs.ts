@@ -1,6 +1,7 @@
 // The ONLY place the frontend polls the job API. Restoration and 3D take far
 // longer than a request, so both are started, then polled until they settle.
 import type { DamageCode } from "./damage-classes";
+import type { DetectionBox } from "./types";
 
 export type JobStatus = "queued" | "running" | "done" | "error";
 
@@ -83,13 +84,21 @@ export function startRepair(
   return startJob("/jobs/repair", form);
 }
 
-/** Start a 3D reconstruction from an upload, or from a finished repair job. */
+/** Start a 3D reconstruction from an upload, or from a finished repair job.
+ *
+ * `boxes` are the detector's regions in the source frame. The 3D service picks
+ * its own subject and cannot be told which one, so the API uses them to cut the
+ * building out before uploading. A restored image shares the source frame, so
+ * the same boxes apply to the `fromJob` path.
+ */
 export function startModel3d(
   source: { file: Blob } | { fromJob: string },
+  boxes: readonly DetectionBox[] = [],
 ): Promise<string> {
   const form = new FormData();
   if ("file" in source) form.append("file", source.file);
   else form.append("from_job", source.fromJob);
+  if (boxes.length > 0) form.append("boxes", JSON.stringify(boxes));
   return startJob("/jobs/model3d", form);
 }
 

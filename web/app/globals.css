@@ -102,6 +102,23 @@ body::before {
    is display:none; under print it is the ONLY thing that renders, on white. */
 .report-doc {
   display: none;
+  /* The paper palette, defined once here rather than as hex literals scattered
+     through components/report/. The app's own tokens cannot be reused: `muted`
+     and `line` are tuned against #0C0C0E and turn to mud on white. */
+  --report-ink: #101114;
+  --report-ink-soft: #5B6068;
+  --report-rule: #D5D8DE;
+  --report-panel: #F4F5F7;
+}
+
+/* WHY a page rule: without one, "one A4 page" is whatever paper size the print
+   dialog last used, so the report's fixed mm layout would be fitted to Letter
+   in one place and A4 in another. The 11mm margin plus the document's 273mm
+   block-size leaves ~2mm of slack against A4's 297mm — enough that a rounding
+   difference cannot spill a second, near-empty sheet. */
+@page {
+  size: A4;
+  margin: 11mm;
 }
 @media print {
   /* Only hide page content when a report is actually mounted — pages without
@@ -115,12 +132,22 @@ body::before {
   }
   body {
     background: #fff;
+    /* ModalShell locks body scroll while a record is open, and the report is
+       only ever printed from there. Left in place, Chrome clips the printed
+       document to a single viewport height. */
+    overflow: visible !important;
   }
+  /* WHY the page layout lives here and not in Tailwind utilities: this class is
+     the print toggle, so it has to set `display` itself, and a plain `.class`
+     rule declared after the utility layer beats `flex` / `text-*` of the same
+     specificity. The utilities that would lose that race are declared here. */
   .report-doc {
-    display: block;
-    color: #111;
+    display: flex;
+    flex-direction: column;
+    color: var(--report-ink);
+    background: #fff;
     /* Chrome/Edge strip backgrounds by default ("Background graphics" off),
-       which would erase DamageStrip segments and the detector-score bar fills. */
+       which would erase the scale segments and the detector-score bar fills. */
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
