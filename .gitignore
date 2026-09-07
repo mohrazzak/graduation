@@ -38,3 +38,6 @@ A-Smart-Site-For-Rehabilitating-Damaged-Buildings/
 # Local Claude session-recovery config
 session-recover.yaml
 .env.bak*
+
+# Runtime logs and pidfiles written by scripts/dev-all.sh
+.run/

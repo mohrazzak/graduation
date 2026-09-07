@@ -84,6 +84,13 @@ The two hardcoded absolute paths in `yolo.py` and `resnet.py`
 
 ## B. Web — boxes hidden
 
+> **Superseded on 2026-09-06 (user decision).** Section B shipped as written,
+> and was then reversed: the photo again draws a box per detection, in its own
+> class colour and with its own label, under one whole-image verdict badge.
+> `components/analyze/DetectionOverlay.tsx` and `lib/detectionGeometry.ts` are
+> the current implementation; CLAUDE.md's ops notes are authoritative. The rest
+> of this spec still describes the shipped state.
+
 Delete `components/analyze/VerdictOverlay.tsx` and its use in `AnalyzeClient`
 and `AnalysisModal`. `ImageWithHeatmap` keeps its optional `children` slot,
 still used by `ScanOverlay`.
@@ -182,4 +189,5 @@ Each phase lands as its own commit, and nothing is claimed done without output:
 - `npx tsc --noEmit` zero errors, zero `any`; `npm run lint` clean; `npm test` green
 - Both locale message files parse and have identical key sets
 - Browser: `/en` and `/ar`, 1440px and 390px — landing, analyze (photo renders
-  with no boxes), history, how-it-works. RTL mirrors, no horizontal overflow.
+  with no boxes — see the section B supersession note; boxes came back on
+  2026-09-06), history, how-it-works. RTL mirrors, no horizontal overflow.

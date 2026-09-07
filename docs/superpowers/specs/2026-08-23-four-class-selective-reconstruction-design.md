@@ -46,7 +46,9 @@ The adapter decodes the uploaded image, runs Ultralytics YOLO detection, and ret
 | 2 | `HVD` | Heavy/Very Heavy Damage |
 | 3 | `TD` | Total Damage |
 
-The overall verdict is the most severe retained class. If several boxes share that class, overall confidence is the highest confidence among those boxes. This is deliberately safety-conservative and was approved by the user.
+The overall verdict is the class holding the single highest detector confidence among the retained boxes; that same confidence is the overall confidence. Equal confidence resolves to the more severe class.
+
+> **Amended 2026-09-07.** As originally designed and approved, the verdict was the *most severe* retained class, chosen to be safety-conservative. The user changed it to highest-confidence-wins because a badge that disagreed with the tallest bar in the score panel read as a contradiction on screen. The accepted trade-off: a low-confidence total-damage region beside a high-confidence intact facade now reports the facade's class, and the per-region boxes are what carry the severe observation.
 
 If no box passes the threshold, `/predict` returns HTTP `422` with detail key `no_detection`; it must never silently return `ND`.
 
@@ -186,7 +188,7 @@ The existing `model3d_path` stores the after model for backward compatibility; `
 ### API
 
 - Exact checkpoint class-name mapping and normalized boxes.
-- Most-severe aggregation and same-class confidence selection.
+- Highest-confidence aggregation, severity tiebreak, and same-class confidence selection.
 - No-detection returns `422` without inventing `ND`.
 - Model roster exposes Raed only by default while preserving legacy backend source.
 - Mask decoding, dimension normalization, empty/malformed rejection, and outside-pixel identity.

@@ -6,7 +6,8 @@ the damaged area in 2D and generate 3D models before and after. Saved to your
 personal history. English + Arabic (full RTL).
 
 > The model **is trained**. A YOLOv8s detector locates buildings and classifies
-> each one; the image-level verdict is the most severe region found. A
+> each one; the image-level verdict is the class of the region the detector
+> scored highest, so the badge always matches the tallest bar in the panel. A
 > deterministic mock backend serves CI and the Docker image, which ship without
 > the weights.
 

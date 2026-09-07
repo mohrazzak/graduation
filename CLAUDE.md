@@ -20,7 +20,10 @@ Supabase now runs as a LOCAL `supabase start` stack (the cloud project was
 deleted; DNS NXDOMAIN, verified 2026-08-31). The full
 register→analyze→save→history flow is browser-verified against it in both
 locales at 1440px and 390px: storage upload, the RLS-guarded `analyses` insert,
-signed-URL reload and the reopened modal all confirmed live.
+signed-URL reload and the reopened modal all confirmed live. As of 2026-09-06
+the photo again draws a box per detection under one verdict badge, on both the
+analyze page and the history modal; placement was measured against `/predict`
+in `/en` at 1440px and `/ar` at 390px for all four samples.
 
 **Generated results now auto-save into the original analysis row.** A live
 repaired PNG and live GLB use deterministic private-storage paths, update that
@@ -39,10 +42,12 @@ torch-before-TensorFlow ordering hazard. The API venv runs Ultralytics 8.4.56
 with the matching CPU pair torch 2.12.1+cpu / torchvision 0.27.1+cpu. Compose
 still defaults to `mock` by design because its image excludes the model stack.
 
-⚠ **Both external generation services were last observed out of credit.**
-Gemini image editing returned 429 and the last known Tripo balance was 0. Do not
-repeat the stale HANDOFF claim that Tripo still has 480 credits without a fresh
-check. The UI reports the named failure honestly.
+⚠ **Generation-service credit is external state — always re-check it live.**
+Tripo read **300.0** via `account_balance` on 2026-09-07 (the key was rotated on
+2026-09-06); the earlier "balance 0" and the older "480 credits" are both dead
+claims. Gemini last returned 429 and has NOT been re-checked since. Never quote
+any of these numbers without running the check again. The UI reports the named
+failure honestly.
 
 **2D repair no longer depends on Gemini.** `REPAIR_BACKEND=auto` tries an
 isolated local Stable Diffusion 1.5 inpainting + Canny ControlNet worker first,
@@ -92,15 +97,29 @@ Single source of truth: `web/lib/damage-classes.ts` (`DAMAGE_CLASSES`) and
 `api/predict/damage_classes.py`. There is no other scale; the legacy
 `tiers.*` domain was deleted on 2026-09-02.
 
-Aggregation is conservative: the most severe retained detection wins; within
-each class the maximum detector confidence is reported. Scores are detector
-confidences, not normalized probabilities. No retained boxes returns
+Aggregation follows detector confidence: the retained detection with the
+HIGHEST confidence decides the verdict, and its own confidence is reported as
+the image-level score; equal confidence resolves to the more severe class.
+Within each class the maximum detector confidence is reported. Scores are
+detector confidences, not normalized probabilities. No retained boxes returns
 `no_detection`, never `ND`.
 
+⚠ **This replaced most-severe-wins on 2026-09-07 (user decision).** The old
+rule was safety-conservative but made the badge disagree with the tallest bar
+in the score panel — a TD verdict at 35.6% sitting under an HVD bar at 52.6%
+read as a contradiction on screen. The accepted trade-off is that a
+low-confidence total-damage region beside a high-confidence intact facade now
+reports the FACADE's class, so the per-region boxes are what carry the severe
+observation. `api/tests/test_damage_classes.py` enforces both the new rule and
+the severity tiebreak. Rows written before this date keep their old verdict —
+history is not migrated, so an old row can disagree with a fresh run of the
+same photo.
+
 ⚠ **The image-level class is DERIVED, not predicted.** `raed` is task `detect`:
-it emits a class per region. Aggregation turns those into one verdict, and the
-UI draws no boxes at all — see the ops note on this, which explains why, before
-changing it.
+it emits a class per region. Aggregation turns those into one verdict. The photo
+shows BOTH — a box per region in its own class colour, under one badge carrying
+the aggregate — see the ops note on this, which explains how the two layers
+differ, before changing either.
 
 ### Trained models
 
@@ -113,11 +132,15 @@ The public display name is **"Trained Model"**. The id `raed` and the persisted
 `scale_version` value `raed4` are NOT display strings — they are written into
 Supabase rows and used for routing, so they must never be renamed.
 
-Both figures are top-1 on the same 146-image validation split. An older YOLO
-model scored 80.37% — that was a TWO-class split with NC dropped, is not
-comparable, and must never be published. Weights live outside the repo at
-`/home/mohrazzak/projects/graduation/` (`RESNET_WEIGHTS_PATH`,
-`YOLO_WEIGHTS_PATH`, `RAED_WEIGHTS_PATH`).
+Neither row carries an accuracy number, and that is deliberate: `raed` is a
+DETECTOR, so what the checkpoint records is precision/recall/mAP — see
+`web/lib/evaluation.ts`. The "both figures are top-1 on a 146-image split"
+sentence that used to sit here described the two retired CLASSIFIERS and was
+removed on 2026-09-07. An older YOLO model scored 80.37% — a TWO-class split
+with NC dropped, not comparable, and it must never be published. Weights live
+outside the repo at `/home/mohrazzak/projects/graduation/` (`RAED_WEIGHTS_PATH`;
+`RESNET_WEIGHTS_PATH` and `YOLO_WEIGHTS_PATH` went with the retired backends and
+are referenced nowhere).
 
 The serving detector is `raed_yolov8s_4class.pt` (22 MB, sha256 `a680e240…`),
 copied there from the untracked reference clone on 2026-08-31 so nothing in the
@@ -127,8 +150,15 @@ which is why `validate_model_names` accepts it. `*.pt` is gitignored, and no
 copy lives in the repo tree.
 
 Its own recorded validation metrics — precision 0.350, recall 0.464,
-mAP50 0.315, mAP50-95 0.190, from 150 epochs at imgsz 800 — are what
-`web/lib/evaluation.ts` publishes. They are DETECTION metrics; the retired
+mAP50 0.315, mAP50-95 0.190 — are what
+`web/lib/evaluation.ts` publishes, alongside the run's full loss curves.
+The run was CONFIGURED for 150 epochs at imgsz 800 but early-stopped at 55
+(patience 30); the served weights are epoch 25, the mAP50-95 argmax, and every
+published figure is that epoch's row — `web/tests/evaluation.test.mjs` enforces
+it. "Trained for 150 epochs" describes a run that never happened. There is no
+accuracy or confidence figure because the checkpoint records none and the
+detection val split is not on this machine.
+They are DETECTION metrics; the retired
 classifier accuracies (74.66% / 71.23%, and an older two-class 80.37%) measured
 different models with a different metric and must never be shown beside them.
 
@@ -157,7 +187,7 @@ web/                    Next.js app
   app/[locale]/         pages: landing, analyze*, history*, how-it-works, login, register  (*=auth)
   components/{ui,analyze,history,layout,...}
   lib/damage-classes.ts THE ND/SMD/HVD/TD scale — single source of truth
-  lib/evaluation.ts     measured accuracy, confusion matrices, dataset splits
+  lib/evaluation.ts     measured DETECTION metrics + the run's full loss curves
   lib/types.ts          Prediction, Analysis (shared types)
   lib/api.ts            ONLY place that calls FastAPI (typed, timeout, errors)
   lib/artifactPersistence.mts  validated generated-artifact save lifecycle
@@ -213,8 +243,16 @@ pip install -r requirements-models.txt   # optional: the real detector (torch)
 LOCAL_REPAIR_PYTHON=/home/mohrazzak/projects/graduation/.venv/bin/python \
   REPAIR_BACKEND=local-controlnet uvicorn main:app --reload --port 8000
 
-# full demo (repo root)
-docker compose up        # web :3000 + api :8000
+# full demo (repo root) — PREFERRED shortcut: supabase + real-model api + host web
+./scripts/dev-all.sh              # start everything on :3000/:8000, then print URLs
+./scripts/dev-all.sh --dev        # same, but `next dev` instead of a prod build
+./scripts/dev-all.sh stop         # stop what it started (supabase stack stays up)
+./scripts/dev-all.sh status|logs  # state table · tail .run/{web,api}.log
+
+docker compose up        # web :3000 + api :8000 — NOTE: its web container cannot
+                         # reach the local supabase stack (127.0.0.1:54321 is the
+                         # container itself), so /analyze and /history bounce a
+                         # logged-in user to /login. dev-all.sh stops it on purpose.
 ```
 
 ## API contract (four-class detector — frontend depends on it)
@@ -242,7 +280,11 @@ docker compose up        # web :3000 + api :8000
 - `POST /jobs/repair` — multipart `file`, edited PNG `mask`, `class_code`
   (required), optional `prompt`. Unselected source pixels must remain unchanged.
 - `POST /jobs/model3d` — multipart `file`, OR `from_job=<repair job id>` to
-  reconstruct from the restored image instead of the original.
+  reconstruct from the restored image instead of the original. Optional `boxes`
+  (JSON array of normalized `{x1,y1,x2,y2}`) and an optional full-frame `mask`
+  bound the building cut-out; both are hints, so a malformed one degrades the
+  crop and never fails the run. Stages are
+  `isolating → uploading → reconstructing → downloading`.
 - `GET /jobs/{id}` includes backend monotonic `timing.elapsed_ms` and ordered
   `timing.stages[{key,status,elapsed_ms}]` in addition to status/artifacts.
 - `GET /jobs/{id}/artifact/{name}` → raw bytes.
@@ -253,7 +295,10 @@ docker compose up        # web :3000 + api :8000
   …), translated in the frontend.
 - A successful live `repaired` PNG or `model` GLB auto-attaches to the same
   Supabase analysis row as the classification. Paths are
-  `{user_id}/{analysis_id}_repaired.png` and `{user_id}/{analysis_id}.glb`.
+  `{user_id}/{analysis_id}_repaired.png`, `{user_id}/{analysis_id}_before.glb`
+  and `{user_id}/{analysis_id}_after.glb` — the 3D extension carries
+  `_before`/`_after` because before- and after-reconstruction are two separate
+  runs (`web/lib/supabase/artifacts.ts`). There is no bare `{analysis_id}.glb`.
   Pre-generated fixture branches must stay outside this persistence lifecycle.
 
 This REPLACED the old frozen contract (`level` 0-5 + six-float array) —
@@ -319,8 +364,8 @@ The cloud recipe below is kept for re-provisioning.
    policies).
 3. Create **private** bucket `analysis-images`. Files live at
    `{user_id}/{analysis_id}.jpg`, `{user_id}/{analysis_id}_heatmap.png`,
-   `{user_id}/{analysis_id}_repaired.png`, and `{user_id}/{analysis_id}.glb`;
-   frontend reads via signed URLs.
+   `{user_id}/{analysis_id}_repaired.png`, `{user_id}/{analysis_id}_before.glb`
+   and `{user_id}/{analysis_id}_after.glb`; frontend reads via signed URLs.
 4. Auth → enable Email provider only; **disable email confirmation** (demo).
    On the local stack this is already the default, so registration completes
    without an email round-trip. Only a CLOUD project needs the dashboard toggle,
@@ -328,14 +373,51 @@ The cloud recipe below is kept for re-provisioning.
 
 ## Ops notes for Claude sessions (hard-won, no secrets here)
 
-- ⚠ **The UI shows ONE verdict per image and draws NO boxes.** Both trained runs
-  were localization models — `raed` is task `detect` — so they emit a class per
-  region, and the image-level class is a derived most-severe-wins summary, not
-  a model output. An overlay labelling each box separately showed three
-  different answers to a question that has one, so it was removed entirely
-  (2026-09-02, user decision). `/predict` still returns `detections` and they
-  are still persisted; only the drawing is gone. If an examiner asks how the
-  verdict is reached, the answer is "the most severe detected region wins".
+- ⚠ **The photo carries per-region boxes AND one verdict badge. They are two
+  different statements — do not "reconcile" them.** `raed` is task `detect`, so
+  a box is a class for that REGION: a photo can legitimately carry an ND box
+  beside a TD box. The badge is the image-level verdict: the class of the
+  single HIGHEST-CONFIDENCE box among exactly those, stated to the same one
+  decimal place as the result panel, and it is the only element carrying the
+  class CODE. Since 2026-09-07 that badge always matches the tallest bar in the
+  score panel — before then it did not, and users read the mismatch as a bug. Boxes were removed on 2026-09-02 precisely because N labelled
+  boxes read as N competing answers; they are back as of 2026-09-06 (user
+  decision) WITH the badge, which is what makes the relationship legible —
+  boxes are the evidence, the badge is the verdict. If an examiner asks how the
+  verdict is reached, the answer is "the region the detector was most
+  confident about wins; ties go to the more severe class".
+  `components/analyze/DetectionOverlay.tsx`, shared by analyze and the history
+  modal, which reads the persisted `detections` jsonb.
+- ⚠ **Box GEOMETRY uses physical `left`/`top`, and that is NOT a breach of the
+  logical-properties rule.** `lib/detectionGeometry.ts` owns it. A box is a
+  coordinate in the photo, not chrome: `inset-inline-start` resolves to `right`
+  under `dir="rtl"` while the `<img>` pixels do NOT mirror, so a logical offset
+  puts every box on the wrong side of the building in `/ar`. That bug shipped in
+  both earlier overlays unnoticed — the 2026-09-02 verification checked that the
+  BADGE mirrored, not that the boxes sat on buildings. The badge keeps its
+  logical offset and does mirror. Same module clamps stored boxes (the history
+  path type-checks a row's coordinates without range-checking them) and flips a
+  label inside its box when it has no room above: `raed` returns near-full-frame
+  boxes, so ALL FOUR samples detect at y1 < 0.04 (ND 0.032, SMD 0.002, HVD 0.000,
+  TD 0.001) and an above-the-box label would be eaten by the figure's
+  `overflow-hidden` — the inside branch is the normal case, not the fallback.
+  `tests/detectionGeometry.test.mjs` is what turns red if any of this is
+  "tidied" back.
+- ⚠ **Tripo picks its own subject, so the building is cut out BEFORE upload.**
+  `image_to_model` at the pinned `v2.5-20250123` has no background-removal,
+  mask or foreground-ratio parameter (checked against the official SDK
+  signature), so the uploaded image is the only lever. Sending a raw street
+  photo made Tripo reconstruct whatever it judged most object-like: the
+  2026-09-06 panorama run came back as a hallucinated blob whose texture atlas
+  contains faces, not facades. `api/jobs/subject.py` now crops to the union of
+  the detector boxes, mattes with the SegFormer silhouette and centers the
+  result on a white RGBA ground filling ~89% of both axes — Tripo's documented
+  condition for a pre-isolated subject. Two guards are load-bearing and
+  measured, not guessed: the matte is skipped unless `stages.has_segmenter()`
+  (the classical fallback is an edge map, which would punch holes through flat
+  facades), and unless its coverage is within 0.30-0.95. The floor exists for
+  total collapse — `sample-TD.jpg` segments to 0.185 and would have uploaded a
+  fragment of the rubble field. `api/tests/test_subject.py` is what turns red.
 - ⚠ **The YOLOv8m-seg run (`best2.pt` / `raed-seg`) was deleted, not lost.** It
   was wired briefly on 2026-09-02 and removed the same day: epoch 2 of a
   150-epoch schedule, worse on every box metric (mAP50 0.204 vs 0.315), and
@@ -421,8 +503,10 @@ The cloud recipe below is kept for re-provisioning.
   `git@github.com:RaedSa1em/…`. **Its `ai/generate_3d_fast.py` contains a
   hardcoded API credential that is still live and still needs rotating** —
   deleting the local copy did not revoke it. Never commit or print the value.
-- `gh` CLI is not installed; the repo has no git remote yet (will gain one for
-  Vercel/Render deployment).
+- `gh` IS installed (`~/.local/bin/gh`) and the repo HAS a remote:
+  `origin git@github-mohrazzak:mohrazzak/graduation.git`, a **private** GitHub
+  repo carrying `main` and `feat/three-tier-pipeline`. Corrected 2026-09-07 —
+  the older "no gh, no remote" note was stale.
 - next-intl: array messages are read with `t.raw("key") as string[]`. Tailwind
   v4 native utilities like `aspect-3/2` / `grayscale-60` work — verify in built
   CSS when in doubt.
@@ -434,9 +518,12 @@ The cloud recipe below is kept for re-provisioning.
 - [ ] Register → analyze sample → animated result → auto-saved → in history →
       survives logout/login.
 - [ ] Same photo always yields the same result for a given model.
-- [ ] The analyzed photo shows NO detection boxes — one verdict, in the panel.
+- [ ] The analyzed photo draws one box per detection in its own class colour
+      under one verdict badge, and the boxes land on the building in `/ar` too.
 - [ ] Each `sample-<CODE>.jpg` is verdicted as its own class by the detector
-      (ND 0.639 / SMD 0.642 / HVD 0.537 / TD 0.576, measured 2026-08-31).
+      (ND 0.639 / SMD 0.642 / HVD 0.537 / TD 0.576, measured 2026-08-31,
+      re-verified unchanged 2026-09-07 under the highest-confidence rule —
+      each sample detects a single class, so the rule change is a no-op here).
 - [ ] Keyboard-only navigation works; reduced-motion disables animations.
 - [ ] Looks incredible at 390px and 1440px.
 - [ ] One-command demo: `docker compose up`.
